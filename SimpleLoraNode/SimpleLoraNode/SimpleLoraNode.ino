@@ -24,6 +24,7 @@ const long frequency = 868E6;  // LoRa Frequency
 const int csPin = 5;          // LoRa radio chip select
 const int resetPin = 15;        // LoRa radio reset
 const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
+const int spreadingFactor = 8;
 
 void setup() {
   Serial.begin(9600);                   // initialize serial
@@ -37,13 +38,12 @@ void setup() {
     while (true);                       // if failed, do nothing
   }
 
+  LoRa.setSpreadingFactor(spreadingFactor);
+  Serial.print("SpreadingFactor: ");
+  Serial.println(spreadingFactor, DEC);
+
   Serial.println("LoRa init succeeded.");
-  Serial.println();
-  Serial.println("LoRa Simple Node");
-  Serial.println("Only receive messages from gateways");
-  Serial.println("Tx: invertIQ disable");
-  Serial.println("Rx: invertIQ enable");
-  Serial.println();
+
 
   LoRa.onReceive(onReceive);
   LoRa.onTxDone(onTxDone);
@@ -51,7 +51,7 @@ void setup() {
 }
 
 void loop() {
-  if (runEvery(1000)) { // repeat every 1000 millis
+  if (runEvery(10000)) { // repeat every 10000 millis
 
     String message = "HeLoRa World! ";
     message += "I'm a Node! ";
@@ -75,6 +75,8 @@ void LoRa_txMode(){
 }
 
 void LoRa_sendMessage(String message) {
+  Serial.print("SendingMessage time_ms: ");
+  Serial.println(millis(), DEC);
   LoRa_txMode();                        // set tx mode
   LoRa.beginPacket();                   // start packet
   LoRa.print(message);                  // add payload
@@ -93,7 +95,8 @@ void onReceive(int packetSize) {
 }
 
 void onTxDone() {
-  Serial.println("TxDone");
+  Serial.print("TxDone time_ms: ");
+  Serial.println(millis(), DEC);
   LoRa_rxMode();
 }
 
