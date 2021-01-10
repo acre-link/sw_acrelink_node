@@ -1,20 +1,10 @@
 /*
-  LoRa Simple Gateway/Node Exemple
-  This code uses InvertIQ function to create a simple Gateway/Node logic.
-  Gateway - Sends messages with enableInvertIQ()
-          - Receives messages with disableInvertIQ()
-  Node    - Sends messages with disableInvertIQ()
-          - Receives messages with enableInvertIQ()
-  With this arrangement a Gateway never receive messages from another Gateway
-  and a Node never receive message from another Node.
-  Only Gateway to Node and vice versa.
-  This code receives messages and sends a message every second.
-  InvertIQ function basically invert the LoRa I and Q signals.
-  See the Semtech datasheet, http://www.semtech.com/images/datasheet/sx1276.pdf
-  for more on InvertIQ register 0x33.
-  created 05 August 2018
-  by Luiz H. Cassettari
-*/
+  Simple LoRa Node
+  Sends a message and goes to deep sleep after tx is done. 
+
+  20210110
+  by Maximilian Betz
+ */
 
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
@@ -29,8 +19,8 @@ const int csPin = 5;          // LoRa radio chip select
 const int resetPin = 15;        // LoRa radio reset
 const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
 
-const int spreadingFactor = 8;  //8 Default
-const int txPower = 17; //17 default
+const int spreadingFactor = 8;  //8 default
+const int txPower = 17; //17 default 
 const int sleepTimeS = 10;
 
 
@@ -114,7 +104,7 @@ void onTxDone() {
   Serial.print(sleepTimeS, DEC);
   Serial.println("s");
   LoRa.sleep();
-  //LoRa_rxMode();
+  //LoRa_rxMode();  // Activate RX in case a receive window is desired.
 
   /*Go to sleep*/
   pinMode(misoPin, INPUT_PULLUP);
@@ -122,7 +112,7 @@ void onTxDone() {
   pinMode(sckPin, INPUT_PULLUP);
   pinMode(csPin, INPUT_PULLUP);
   pinMode(resetPin, INPUT_PULLUP); 
-  esp_sleep_enable_timer_wakeup(1000000 * 10); // Sleep 10 second
+  esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second
   esp_deep_sleep_start();
 }
 
