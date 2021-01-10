@@ -18,17 +18,24 @@
 
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
+#include <time.h>
 
 const long frequency = 868E6;  // LoRa Frequency
 
+const int misoPin = 19;
+const int mosiPin = 23;
+const int sckPin = 18;
 const int csPin = 5;          // LoRa radio chip select
 const int resetPin = 15;        // LoRa radio reset
 const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
+
 const int spreadingFactor = 8;  //8 Default
 const int txPower = 17; //17 default
+const int sleepTimeS = 10;
+
 
 void setup() {
-  Serial.begin(9600);                   // initialize serial
+  Serial.begin(115200);                   // initialize serial
   while (!Serial);
   Serial.println("LoRa Node");
 
@@ -56,16 +63,16 @@ void setup() {
 }
 
 void loop() {
-  if (runEvery(10000)) { // repeat every 10000 millis
+  String message = "HeLoRa World! ";
+  message += "I'm a Node! ";
+  message += millis();
+  LoRa_sendMessage(message); // send a message
+  Serial.print("Send Message!: ");
+  Serial.println(message);
 
-    String message = "HeLoRa World! ";
-    message += "I'm a Node! ";
-    message += millis();
-
-    LoRa_sendMessage(message); // send a message
-
-    Serial.println("Send Message!");
-
+  while(true)
+  {
+    //Wait for tx Done and then go to sleep. 
   }
 }
 
@@ -102,7 +109,21 @@ void onReceive(int packetSize) {
 void onTxDone() {
   Serial.print("TxDone time_ms: ");
   Serial.println(millis(), DEC);
-  LoRa_rxMode();
+
+  Serial.print("Going to sleep for: ");
+  Serial.print(sleepTimeS, DEC);
+  Serial.println("s");
+  LoRa.sleep();
+  //LoRa_rxMode();
+
+  /*Go to sleep*/
+  pinMode(misoPin, INPUT_PULLUP);
+  pinMode(mosiPin, INPUT_PULLUP);
+  pinMode(sckPin, INPUT_PULLUP);
+  pinMode(csPin, INPUT_PULLUP);
+  pinMode(resetPin, INPUT_PULLUP); 
+  esp_sleep_enable_timer_wakeup(1000000 * 10); // Sleep 10 second
+  esp_deep_sleep_start();
 }
 
 boolean runEvery(unsigned long interval)
