@@ -24,7 +24,8 @@ const long frequency = 868E6;  // LoRa Frequency
 const int csPin = 5;          // LoRa radio chip select
 const int resetPin = 15;        // LoRa radio reset
 const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
-const int spreadingFactor = 8;
+const int spreadingFactor = 8;  //8 Default
+const int txPower = 17; //17 default
 
 void setup() {
   Serial.begin(9600);                   // initialize serial
@@ -42,6 +43,10 @@ void setup() {
   Serial.print("SpreadingFactor: ");
   Serial.println(spreadingFactor, DEC);
 
+  LoRa.setTxPower(txPower);
+  Serial.print("TxPower: ");
+  Serial.println(txPower, DEC);
+  
   Serial.println("LoRa init succeeded.");
 
 
