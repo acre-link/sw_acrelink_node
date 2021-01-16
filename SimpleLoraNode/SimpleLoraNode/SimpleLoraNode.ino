@@ -9,6 +9,8 @@
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
 #include <time.h>
+#include <OneWire.h>
+#include <DS18B20.h>
 
 const long frequency = 868E6;  // LoRa Frequency
 
@@ -18,11 +20,16 @@ const int sckPin = 18;
 const int csPin = 5;          // LoRa radio chip select
 const int resetPin = 15;        // LoRa radio reset
 const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
+const int oneWireEnablePin = 35;
+const int oneWireDataPin1 = 25;
+const int oneWireDataPin2 = 26;
 
 const int spreadingFactor = 8;  //8 default
 const int txPower = 17; //17 default 
 const int sleepTimeS = 10;
 
+OneWire oneWire1(oneWireDataPin1);
+DS18B20 sensor1(&oneWire1);
 
 void setup() {
   Serial.begin(115200);                   // initialize serial
@@ -50,9 +57,27 @@ void setup() {
   LoRa.onReceive(onReceive);
   LoRa.onTxDone(onTxDone);
   LoRa_rxMode();
+
+
+  /*Enable OneWire MOSFET Power Supply*/
+  pinMode(oneWireEnablePin, OUTPUT);
+  digitalWrite(oneWireEnablePin, LOW); 
+
+  sensor1.begin();
 }
 
 void loop() {
+
+  /*First get Temperature*/
+  sensor1.requestTemperatures();
+  while (!sensor1.isConversionComplete())  // wait until sensor is ready
+  {
+    Serial.println("Waiting for Temperature Conversion Done...");
+  }
+  Serial.print("Temperature: ");
+  Serial.println(sensor1.getTempC());
+  
+  
   String message = "HeLoRa World! ";
   message += "I'm a Node! ";
   message += millis();
