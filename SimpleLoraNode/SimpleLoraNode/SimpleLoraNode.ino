@@ -1,10 +1,12 @@
 /*
   Simple LoRa Node
   Sends a message and goes to deep sleep after tx is done. 
-
+  ESP32 WROOM uses a 40MHz crystal
   20210110
   by Maximilian Betz
  */
+
+#define F_CPU 80000000L
 
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
@@ -32,6 +34,8 @@ OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
 
 void setup() {
+  setCpuFrequencyMhz(80); 
+  
   Serial.begin(115200);                   // initialize serial
   while (!Serial);
   Serial.println("LoRa Node");
@@ -70,7 +74,7 @@ void loop() {
 
   /*First get Temperature*/
   int start = millis();
-  int i = millis();
+  int i = 0;
   float temperature = -200;
   
   sensor1.setResolution(10); //Low Resolution to speed up conversion time. Conversion time: 9=100ms, 10=180ms, 11=340ms, 12=658ms 
@@ -78,14 +82,43 @@ void loop() {
   
   while (!sensor1.isConversionComplete())  // wait until sensor is ready. Attention never finishes if sensor is not available.
   {
-    if ((millis() - i)  > 250)  /*Print only once every 250ms.*/
+    if (runEvery(100))
     {
-       Serial.println("Waiting for Temperature Conversion Done...");
+      i++;
+      Serial.println("Waiting for Temperature Conversion Done...");
     }
-    i = millis();
+    
+    if(i > 15)  //Should be sufficient even for 12 Bit resolution!
+    {
+      Serial.println("Aborted Waiting for Temperature Conversion Done...");
+      break; // Do not drain battery and wait forever here!
+    }
   }
   temperature = sensor1.getTempC();
-  
+
+  if((int)temperature  == DEVICE_DISCONNECTED)
+  {
+     Serial.println("No Temperaturesensor connected.");  //Somehow does not work. Better to check the address for 0!
+  }
+  else if((int)temperature == DEVICE_CRC_ERROR)
+  {
+     Serial.println("Temperaturesensor CRC error.");
+  }
+
+  Serial.print("Temperature Sensore Address: ");
+  byte buffer[8] = {0,0,0,0,0,0,0,0};
+  sensor1.getAddress(buffer);
+  for (int i = 0; i < 8; i++)
+  {
+    Serial.print(buffer[i], HEX);
+  }
+  Serial.println();
+
+ if ((buffer[0] == 0) && (buffer[1] == 0) && (buffer[2] == 0) && (buffer[3] == 0) && (buffer[4] == 0)) 
+ {
+   temperature = -273.15;  //Invalid temperature if there is no OneWire Sensor found on the Bus!
+ }
+
   int duration = millis() - start;
   Serial.print("Temperature: ");
   Serial.print(temperature);
