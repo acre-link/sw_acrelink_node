@@ -69,13 +69,28 @@ void setup() {
 void loop() {
 
   /*First get Temperature*/
+  int start = millis();
+  int i = millis();
+  float temperature = -200;
+  
+  sensor1.setResolution(10); //Low Resolution to speed up conversion time. Conversion time: 9=100ms, 10=180ms, 11=340ms, 12=658ms 
   sensor1.requestTemperatures();
-  while (!sensor1.isConversionComplete())  // wait until sensor is ready
+  
+  while (!sensor1.isConversionComplete())  // wait until sensor is ready. Attention never finishes if sensor is not available.
   {
-    Serial.println("Waiting for Temperature Conversion Done...");
+    if ((millis() - i)  > 250)  /*Print only once every 250ms.*/
+    {
+       Serial.println("Waiting for Temperature Conversion Done...");
+    }
+    i = millis();
   }
+  temperature = sensor1.getTempC();
+  
+  int duration = millis() - start;
   Serial.print("Temperature: ");
-  Serial.println(sensor1.getTempC());
+  Serial.print(temperature);
+  Serial.print(" Duration: ");
+  Serial.println(duration, DEC);
   
   
   String message = "HeLoRa World! ";
