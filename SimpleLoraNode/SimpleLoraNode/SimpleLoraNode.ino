@@ -33,16 +33,22 @@ const int sleepTimeS = 10;
 const int maximumAwakeTimeMs = 3000;
 const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish between different nodes.
 
+
+/* Global objects */
 char printBuffer[100] = {0};  //Just some static memory for sprintf / print functions.
 bool txDoneFlag = false;
 bool rxDoneFlag = false;
-
 OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
 
+
+/*#############################################################################*/
+/*#############################################################################*/
+/* Helper functions */
+
+/* Get MAC address from WIFI and use for Node ID in Lora message.*/ 
 void getId(uint8_t *id)
 {
-  /* Get MAC address from WIFI and use for Node ID in Lora message.*/
   uint8_t baseMac[6];
   esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
 
@@ -55,41 +61,7 @@ void getId(uint8_t *id)
   Serial.println(printBuffer);
 }
 
-/*Initialize hardware and configure Lora module*/
-void setup() {
-  setCpuFrequencyMhz(80); 
-  Serial.begin(115200);                   // initialize serial
-  while (!Serial);
-  Serial.println("LoRa Node woken up!");
-
-  LoRa.setPins(csPin, resetPin, irqPin);
-
-  if (!LoRa.begin(frequency)) {
-    Serial.println("LoRa init failed. Check your connections.");
-    while (true);                       // if failed, do nothing
-  }
-
-  LoRa.setSpreadingFactor(spreadingFactor);
-  Serial.print("SpreadingFactor: ");
-  Serial.println(spreadingFactor, DEC);
-
-  LoRa.setTxPower(txPower);
-  Serial.print("TxPower: ");
-  Serial.println(txPower, DEC);
-  
-  Serial.println("LoRa init succeeded.");
-
-
-  LoRa.onReceive(onReceive);
-  LoRa.onTxDone(onTxDone);
-  /*LoRa should be initialized here and in sleep mode*/
-  
-  /*Enable OneWire MOSFET Power Supply*/
-  pinMode(oneWireEnablePin, OUTPUT);
-  digitalWrite(oneWireEnablePin, LOW); 
-  sensor1.begin();
-}
-
+/* Get temperature from onewire sensor.*/ 
 float get_temperature(void)
 {
     /*First get Temperature*/
@@ -148,14 +120,113 @@ float get_temperature(void)
   return temperature;
 }
 
-#define MESSAGE_LEN 30
-uint8_t lora_message[MESSAGE_LEN] = {0};
-void loop() {
-  /*
-   * Message structure:   [id,id,id,id,temperaturehigh, temperaturelow]
-   * 
-  */
+/* Set LoRa to rx mode.  onReceive will be triggerd after a reception.*/
+void LoRa_rxMode()
+{
+  LoRa.enableInvertIQ();                // active invert I and Q signals
+  LoRa.receive();                       // set receive mode
+}
 
+/* Set LoRa to tx mode.  onTxDone will be triggered after the transmission. */
+void LoRa_txMode()
+{
+  LoRa.idle();                          // set standby mode
+  LoRa.disableInvertIQ();               // normal mode
+}
+
+/* Set flag if reception occured*/
+void onReceive(int packetSize) 
+{
+  rxDoneFlag = true;
+}
+
+/* Set flag once transmission done*/
+void onTxDone() 
+{
+  txDoneFlag = true;
+}
+
+/* Configure pins and pheripheral for very low sleep current and got to sleep.*/
+void goToDeepSleep(void)
+{
+  Serial.print("Sleeping for: ");
+  Serial.print(sleepTimeS, DEC);
+  Serial.println("s");
+  LoRa.sleep();
+
+  /*Configure pins for low sleep current.*/
+  pinMode(misoPin, INPUT_PULLUP);
+  pinMode(mosiPin, INPUT_PULLUP);
+  pinMode(sckPin, INPUT_PULLUP);
+  pinMode(csPin, INPUT_PULLUP);
+  pinMode(resetPin, INPUT_PULLUP); 
+  esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second
+  esp_deep_sleep_start();
+}
+
+/* Must be called cyclically and returns true once interval expired. */
+boolean runEvery(unsigned long interval)
+{
+  static unsigned long previousMillis = 0;
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval)
+  {
+    previousMillis = currentMillis;
+    return true;
+  }
+  return false;
+}
+
+
+/*#############################################################################*/
+/*#############################################################################*/
+/* Main application code */
+#define MESSAGE_LEN 30
+/*
+ * Message structure:   [id,id,id,id,temperaturehigh, temperaturelow]
+ */
+uint8_t lora_message[MESSAGE_LEN] = {0};
+
+/* Initialize hardware and configure pheripharals. */
+void setup() 
+{
+  setCpuFrequencyMhz(80); 
+  Serial.begin(115200);                   // initialize serial
+  while (!Serial);
+  Serial.println("LoRa Node woken up!");
+
+  LoRa.setPins(csPin, resetPin, irqPin);
+
+  if (!LoRa.begin(frequency)) 
+  {
+    Serial.println("LoRa init failed. Check your connections.");
+    while (true);                       // if failed, do nothing
+  }
+
+  LoRa.setSpreadingFactor(spreadingFactor);
+  Serial.print("SpreadingFactor: ");
+  Serial.println(spreadingFactor, DEC);
+
+  LoRa.setTxPower(txPower);
+  Serial.print("TxPower: ");
+  Serial.println(txPower, DEC);
+  
+  Serial.println("LoRa init succeeded.");
+
+
+  LoRa.onReceive(onReceive);
+  LoRa.onTxDone(onTxDone);
+  /*LoRa should be initialized here and in sleep mode*/
+  
+  /*Enable OneWire MOSFET Power Supply*/
+  pinMode(oneWireEnablePin, OUTPUT);
+  digitalWrite(oneWireEnablePin, LOW); 
+  sensor1.begin();
+}
+
+/* Read temperature, id, assemble package and transmit it.*/
+void loop() 
+{
   /*Prepare and send the Lora message here*/
   float temperature = get_temperature();
   getId(lora_message);
@@ -206,56 +277,4 @@ void loop() {
    Serial.println(millis(), DEC); 
    goToDeepSleep();
  }
-}
-
-void LoRa_rxMode(){
-  LoRa.enableInvertIQ();                // active invert I and Q signals
-  LoRa.receive();                       // set receive mode
-}
-
-void LoRa_txMode(){
-  LoRa.idle();                          // set standby mode
-  LoRa.disableInvertIQ();               // normal mode
-}
-
-void onReceive(int packetSize) {
-  rxDoneFlag = true;
-  // TODO: implement reception in main loop if required. 
-  //while (LoRa.available()) {
-  //  message += (char)LoRa.read();
-  //}
-}
-
-void goToDeepSleep(void)
-{
-  Serial.print("Sleeping for: ");
-  Serial.print(sleepTimeS, DEC);
-  Serial.println("s");
-  LoRa.sleep();
-
-  /*Go to sleep*/
-  pinMode(misoPin, INPUT_PULLUP);
-  pinMode(mosiPin, INPUT_PULLUP);
-  pinMode(sckPin, INPUT_PULLUP);
-  pinMode(csPin, INPUT_PULLUP);
-  pinMode(resetPin, INPUT_PULLUP); 
-  esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second
-  esp_deep_sleep_start();
-}
-
-/* Gets called once LORA is done transmitting the message*/
-void onTxDone() {
-  txDoneFlag = true;
-}
-
-boolean runEvery(unsigned long interval)
-{
-  static unsigned long previousMillis = 0;
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis;
-    return true;
-  }
-  return false;
 }
