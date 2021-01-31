@@ -35,6 +35,7 @@ const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish bet
 
 char printBuffer[100] = {0};  //Just some static memory for sprintf / print functions.
 bool txDoneFlag = false;
+bool rxDoneFlag = false;
 
 OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
@@ -81,12 +82,11 @@ void setup() {
 
   LoRa.onReceive(onReceive);
   LoRa.onTxDone(onTxDone);
-  LoRa_rxMode();
-
+  /*LoRa should be initialized here and in sleep mode*/
+  
   /*Enable OneWire MOSFET Power Supply*/
   pinMode(oneWireEnablePin, OUTPUT);
   digitalWrite(oneWireEnablePin, LOW); 
-
   sensor1.begin();
 }
 
@@ -173,7 +173,7 @@ void loop() {
     Serial.print(printfbuf);
   }
   Serial.println("");
-  
+  LoRa_txMode();                        // set tx mode
   LoRa.beginPacket();                   // start packet
   for(int i = 0; i < 6; i++)
   {
@@ -218,25 +218,12 @@ void LoRa_txMode(){
   LoRa.disableInvertIQ();               // normal mode
 }
 
-/*For ASCII String messages*/
-void LoRa_sendMessage(String &message) {
-  Serial.print("SendingMessage time_ms: ");
-  Serial.println(millis(), DEC);
-  LoRa_txMode();                        // set tx mode
-  LoRa.beginPacket();                   // start packet
-  LoRa.print(message);             // add payload
-  LoRa.endPacket(true);                 // finish packet and send it
-}
-
 void onReceive(int packetSize) {
-  String message = "";
-
-  while (LoRa.available()) {
-    message += (char)LoRa.read();
-  }
-
-  Serial.print("Node Receive: ");
-  Serial.println(message);
+  rxDoneFlag = true;
+  // TODO: implement reception in main loop if required. 
+  //while (LoRa.available()) {
+  //  message += (char)LoRa.read();
+  //}
 }
 
 void goToDeepSleep(void)
@@ -245,7 +232,6 @@ void goToDeepSleep(void)
   Serial.print(sleepTimeS, DEC);
   Serial.println("s");
   LoRa.sleep();
-  //LoRa_rxMode();  // Activate RX in case a receive window is desired.
 
   /*Go to sleep*/
   pinMode(misoPin, INPUT_PULLUP);
