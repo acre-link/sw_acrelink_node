@@ -32,23 +32,24 @@ const int txPower = 14; //14 is the legal limit on 868.0 - 868.7
 const int sleepTimeS = 10;
 const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish between different nodes.
 
+char printBuffer[100] = {0};  //Just some static memory for sprintf / print functions.
+
 OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
 
-void getId(uint8_t &id, uint8_t len)
+void getId(uint8_t *id)
 {
   /* Get MAC address from WIFI and use for Node ID in Lora message.*/
   uint8_t baseMac[6];
   esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
-  char baseMacChr[18] = {0};
 
   id[0] = nodeGeneration;
   id[1] = baseMac[3];
   id[2] = baseMac[4];
   id[3] = baseMac[5];
 
-  sprintf(baseMacChr, "Node Id: %02X:%02X:%02X:%02X", id[0], id[1], id[2], id[3]);
-  Serial.println(baseMacChr);
+  sprintf(printBuffer, "Node Id: %02X:%02X:%02X:%02X", id[0], id[1], id[2], id[3]);
+  Serial.println(printBuffer);
 }
 
 /*Initialize hardware and configure Lora module*/
@@ -145,7 +146,8 @@ float get_temperature(void)
   return temperature;
 }
 
-#define MESSAGE_LEN 6
+#define MESSAGE_LEN 30
+uint8_t lora_message[MESSAGE_LEN] = {0};
 void loop() {
   /*
    * Message structure:   [id,id,id,id,temperaturehigh, temperaturelow]
@@ -155,21 +157,27 @@ void loop() {
 
   /*Prepare and send the Lora message here*/
   float temperature = get_temperature();
-  uint8_t message[MESSAGE_LEN] = {0};
-  getId(&message[0], 4);
+  getId(lora_message);
+  
   int16_t i16temperature = (int16_t) (temperature * 100); /*Scale temperature to 1/100 degrees centigrade*/ 
   Serial.println(i16temperature);
-  message[4] = (uint8_t)((i16temperature >> 8));
-  message[5] = (uint8_t)(i16temperature & 0xFF);
-  
+  lora_message[4] = (uint8_t)((i16temperature >> 8));
+  lora_message[5] = (uint8_t)(i16temperature & 0xFF);
+  uint8_t lora_message_length = 6;
   char printfbuf[50] = {0};
-  sprintf(printfbuf, "Sending Message: %02X:%02X:%02X:%02X:%02X:%02X", message[0], message[1], message[2], message[3], message[4], message[5]);
-  Serial.println(printfbuf);
-
-  LoRa.beginPacket();                   // start packet
-  for(int i = 0; i < MESSAGE_LEN; i++)
+   
+  Serial.print("Sending Message: ");
+  for(int i = 0; i<lora_message_length; i++)
   {
-      LoRa.print(message[i]);     // add payload
+    sprintf(printfbuf, "%02X:", lora_message[i]);
+    Serial.print(printfbuf);
+  }
+  Serial.println("");
+  
+  LoRa.beginPacket();                   // start packet
+  for(int i = 0; i < 6; i++)
+  {
+      LoRa.print(lora_message[i]);     // add payload
   }
 
   LoRa.endPacket(true);                 // finish packet and send it
