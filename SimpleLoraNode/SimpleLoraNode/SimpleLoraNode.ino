@@ -27,9 +27,10 @@ const int oneWireEnablePin = 35;
 const int oneWireDataPin1 = 25;
 const int oneWireDataPin2 = 26;
 
-const int spreadingFactor = 8;  //8 default
+const int spreadingFactor = 10;  //8 default
 const int txPower = 14; //14 is the legal limit on 868.0 - 868.7
 const int sleepTimeS = 10;
+const int maximumAwakeTimeMs = 3000;
 const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish between different nodes.
 
 char printBuffer[100] = {0};  //Just some static memory for sprintf / print functions.
@@ -154,13 +155,11 @@ void loop() {
    * 
   */
 
-
   /*Prepare and send the Lora message here*/
   float temperature = get_temperature();
   getId(lora_message);
   
   int16_t i16temperature = (int16_t) (temperature * 100); /*Scale temperature to 1/100 degrees centigrade*/ 
-  Serial.println(i16temperature);
   lora_message[4] = (uint8_t)((i16temperature >> 8));
   lora_message[5] = (uint8_t)(i16temperature & 0xFF);
   uint8_t lora_message_length = 6;
@@ -184,8 +183,20 @@ void loop() {
   //LoRa_sendMessage(message, (uint8_t)MESSAGE_LEN);
 
   while(true)
-  {
-    //Wait for tx Done and then go to sleep.  TODO: Force going to sleep after 1 second. In case Lora does not finish sending. 
+  { 
+    //Wait for tx Done and then go to sleep. 
+    while(millis() < maximumAwakeTimeMs)
+    {
+      if (runEvery(100))
+      {
+        Serial.println("Waiting for Tx Done...");
+      }
+    }
+    
+     //Force going to sleep after 1 second. In case Lora does not finish sending. 
+    Serial.println("Forcing going to sleep without waiting for Tx done. time_ms: ");
+    Serial.println(millis(), DEC); 
+    goToDeepSleep(); //Test what happens
   }
 }
 
@@ -220,12 +231,9 @@ void onReceive(int packetSize) {
   Serial.println(message);
 }
 
-/* Gets called once LORA is done transmitting the message*/
-void onTxDone() {
-  Serial.print("TxDone time_ms: ");
-  Serial.println(millis(), DEC);
-
-  Serial.print("Going to sleep for: ");
+void goToDeepSleep(void)
+{
+    Serial.print("Going to sleep for: ");
   Serial.print(sleepTimeS, DEC);
   Serial.println("s");
   LoRa.sleep();
@@ -239,6 +247,13 @@ void onTxDone() {
   pinMode(resetPin, INPUT_PULLUP); 
   esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second
   esp_deep_sleep_start();
+}
+
+/* Gets called once LORA is done transmitting the message*/
+void onTxDone() {
+  Serial.print("TxDone time_ms: ");
+  Serial.println(millis(), DEC);
+  goToDeepSleep();
 }
 
 boolean runEvery(unsigned long interval)
