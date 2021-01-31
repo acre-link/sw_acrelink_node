@@ -34,6 +34,7 @@ const int maximumAwakeTimeMs = 3000;
 const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish between different nodes.
 
 char printBuffer[100] = {0};  //Just some static memory for sprintf / print functions.
+bool txDoneFlag = false;
 
 OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
@@ -178,26 +179,33 @@ void loop() {
   {
       LoRa.print(lora_message[i]);     // add payload
   }
-
   LoRa.endPacket(true);                 // finish packet and send it
-  //LoRa_sendMessage(message, (uint8_t)MESSAGE_LEN);
 
   while(true)
   { 
     //Wait for tx Done and then go to sleep. 
-    while(millis() < maximumAwakeTimeMs)
+    while(true)
     {
-      if (runEvery(100))
-      {
-        Serial.println("Waiting for Tx Done...");
-      }
-    }
-    
-     //Force going to sleep after 1 second. In case Lora does not finish sending. 
-    Serial.println("Forcing going to sleep without waiting for Tx done. time_ms: ");
-    Serial.println(millis(), DEC); 
-    goToDeepSleep(); //Test what happens
-  }
+     if (runEvery(100))
+     {
+      Serial.println("Waiting for Tx Done...");
+     }
+      
+     if (millis() >= maximumAwakeTimeMs)
+     {
+          Serial.println("Forcing going to sleep. Tx not done! ms: ");
+          break;
+     }
+
+     if(true == txDoneFlag)
+     {
+        Serial.print("TxDone ms: ");
+        break;
+     }
+   }
+   Serial.println(millis(), DEC); 
+   goToDeepSleep();
+ }
 }
 
 void LoRa_rxMode(){
@@ -233,7 +241,7 @@ void onReceive(int packetSize) {
 
 void goToDeepSleep(void)
 {
-    Serial.print("Going to sleep for: ");
+  Serial.print("Sleeping for: ");
   Serial.print(sleepTimeS, DEC);
   Serial.println("s");
   LoRa.sleep();
@@ -251,9 +259,7 @@ void goToDeepSleep(void)
 
 /* Gets called once LORA is done transmitting the message*/
 void onTxDone() {
-  Serial.print("TxDone time_ms: ");
-  Serial.println(millis(), DEC);
-  goToDeepSleep();
+  txDoneFlag = true;
 }
 
 boolean runEvery(unsigned long interval)
