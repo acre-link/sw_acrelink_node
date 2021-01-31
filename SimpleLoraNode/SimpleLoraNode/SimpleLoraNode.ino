@@ -13,6 +13,7 @@
 #include <time.h>
 #include <OneWire.h>
 #include <DS18B20.h>
+#include <esp_system.h>
 
 const long frequency = 868E6;  // LoRa Frequency
 
@@ -27,18 +28,35 @@ const int oneWireDataPin1 = 25;
 const int oneWireDataPin2 = 26;
 
 const int spreadingFactor = 8;  //8 default
-const int txPower = 17; //17 default 
+const int txPower = 14; //14 is the legal limit on 868.0 - 868.7
 const int sleepTimeS = 10;
+const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish between different nodes.
 
 OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
 
+void getId(uint8_t &id, uint8_t len)
+{
+  /* Get MAC address from WIFI and use for Node ID in Lora message.*/
+  uint8_t baseMac[6];
+  esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
+  char baseMacChr[18] = {0};
+
+  id[0] = nodeGeneration;
+  id[1] = baseMac[3];
+  id[2] = baseMac[4];
+  id[3] = baseMac[5];
+
+  sprintf(baseMacChr, "Node Id: %02X:%02X:%02X:%02X", id[0], id[1], id[2], id[3]);
+  Serial.println(baseMacChr);
+}
+
+/*Initialize hardware and configure Lora module*/
 void setup() {
   setCpuFrequencyMhz(80); 
-  
   Serial.begin(115200);                   // initialize serial
   while (!Serial);
-  Serial.println("LoRa Node");
+  Serial.println("LoRa Node woken up!");
 
   LoRa.setPins(csPin, resetPin, irqPin);
 
@@ -62,7 +80,6 @@ void setup() {
   LoRa.onTxDone(onTxDone);
   LoRa_rxMode();
 
-
   /*Enable OneWire MOSFET Power Supply*/
   pinMode(oneWireEnablePin, OUTPUT);
   digitalWrite(oneWireEnablePin, LOW); 
@@ -70,12 +87,12 @@ void setup() {
   sensor1.begin();
 }
 
-void loop() {
-
-  /*First get Temperature*/
+float get_temperature(void)
+{
+    /*First get Temperature*/
   int start = millis();
   int i = 0;
-  float temperature = -200;
+  float temperature = -273.15;
   
   sensor1.setResolution(10); //Low Resolution to speed up conversion time. Conversion time: 9=100ms, 10=180ms, 11=340ms, 12=658ms 
   sensor1.requestTemperatures();
@@ -122,20 +139,45 @@ void loop() {
   int duration = millis() - start;
   Serial.print("Temperature: ");
   Serial.print(temperature);
-  Serial.print(" Duration: ");
+  Serial.print(" Measurement duration: ");
   Serial.println(duration, DEC);
+
+  return temperature;
+}
+
+#define MESSAGE_LEN 6
+void loop() {
+  /*
+   * Message structure:   [id,id,id,id,temperaturehigh, temperaturelow]
+   * 
+  */
+
+
+  /*Prepare and send the Lora message here*/
+  float temperature = get_temperature();
+  uint8_t message[MESSAGE_LEN] = {0};
+  getId(&message[0], 4);
+  int16_t i16temperature = (int16_t) (temperature * 100); /*Scale temperature to 1/100 degrees centigrade*/ 
+  Serial.println(i16temperature);
+  message[4] = (uint8_t)((i16temperature >> 8));
+  message[5] = (uint8_t)(i16temperature & 0xFF);
   
-  
-  String message = "HeLoRa World! ";
-  message += "I'm a Node! ";
-  message += millis();
-  LoRa_sendMessage(message); // send a message
-  Serial.print("Send Message!: ");
-  Serial.println(message);
+  char printfbuf[50] = {0};
+  sprintf(printfbuf, "Sending Message: %02X:%02X:%02X:%02X:%02X:%02X", message[0], message[1], message[2], message[3], message[4], message[5]);
+  Serial.println(printfbuf);
+
+  LoRa.beginPacket();                   // start packet
+  for(int i = 0; i < MESSAGE_LEN; i++)
+  {
+      LoRa.print(message[i]);     // add payload
+  }
+
+  LoRa.endPacket(true);                 // finish packet and send it
+  //LoRa_sendMessage(message, (uint8_t)MESSAGE_LEN);
 
   while(true)
   {
-    //Wait for tx Done and then go to sleep. 
+    //Wait for tx Done and then go to sleep.  TODO: Force going to sleep after 1 second. In case Lora does not finish sending. 
   }
 }
 
@@ -149,12 +191,13 @@ void LoRa_txMode(){
   LoRa.disableInvertIQ();               // normal mode
 }
 
-void LoRa_sendMessage(String message) {
+/*For ASCII String messages*/
+void LoRa_sendMessage(String &message) {
   Serial.print("SendingMessage time_ms: ");
   Serial.println(millis(), DEC);
   LoRa_txMode();                        // set tx mode
   LoRa.beginPacket();                   // start packet
-  LoRa.print(message);                  // add payload
+  LoRa.print(message);             // add payload
   LoRa.endPacket(true);                 // finish packet and send it
 }
 
@@ -169,6 +212,7 @@ void onReceive(int packetSize) {
   Serial.println(message);
 }
 
+/* Gets called once LORA is done transmitting the message*/
 void onTxDone() {
   Serial.print("TxDone time_ms: ");
   Serial.println(millis(), DEC);
