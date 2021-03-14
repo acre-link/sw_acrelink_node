@@ -98,7 +98,7 @@ float get_temperature(void)
      Serial.println("Temperaturesensor CRC error.");
   }
 
-  Serial.print("Temperature Sensore Address: ");
+  Serial.print("Temperature Sensor Address: ");
   byte buffer[8] = {0,0,0,0,0,0,0,0};
   sensor1.getAddress(buffer);
   for (int i = 0; i < 8; i++)
@@ -152,7 +152,8 @@ void goToDeepSleep(uint8_t delay_offset)
 {
   uint32_t baseSleepTime = 1000000 * sleepTimeS;
   uint32_t individualSleepTime = baseSleepTime + 300000 * delay_offset;  // Some pseudo random offset to the sleep time.
-  
+
+  individualSleepTime = 10000000; //Debug send more often at 1 /10s
   Serial.print("Sleeping for: ");
   Serial.print((individualSleepTime / 1000000), DEC);
   Serial.println("s");
@@ -262,7 +263,7 @@ void loop()
   Serial.println("");
   LoRa_txMode();                        // set tx mode
   LoRa.beginPacket();                   // start packet
-  for(int i = 0; i < 6; i++)
+  for(int i = 0; i < lora_message_length; i++)
   {
       LoRa.print(lora_message[i]);     // add payload
   }
