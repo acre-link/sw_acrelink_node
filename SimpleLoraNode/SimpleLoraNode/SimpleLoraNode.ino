@@ -41,6 +41,7 @@ bool rxDoneFlag = false;
 OneWire oneWire1(oneWireDataPin1);
 DS18B20 sensor1(&oneWire1);
 
+RTC_DATA_ATTR uint16_t batteryVoltage = 0;  //Survives deep sleep. 
 
 /*#############################################################################*/
 /*#############################################################################*/
@@ -160,7 +161,9 @@ void goToDeepSleep(void)
   pinMode(sckPin, INPUT_PULLUP);
   pinMode(csPin, INPUT_PULLUP);
   pinMode(resetPin, INPUT_PULLUP); 
-  esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second
+  //TODO: calculate a random delay on top of the "sleeping time" so that two nodes never send with an identical time interval. 
+  // Something like "airtime of message" * randombyte or last MAC Byte.
+  esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second   
   esp_deep_sleep_start();
 }
 
@@ -234,7 +237,18 @@ void loop()
   int16_t i16temperature = (int16_t) (temperature * 100); /*Scale temperature to 1/100 degrees centigrade*/ 
   lora_message[4] = (uint8_t)((i16temperature >> 8));
   lora_message[5] = (uint8_t)(i16temperature & 0xFF);
-  uint8_t lora_message_length = 6;
+
+  /*Add humitiy*/
+  lora_message[6] = 0xFF;   /*TODO: add sensor*/
+
+  /* Add digital input bits*/
+  lora_message[7] = 0xAA;  /*TODO: add digital inputs and read bits*/
+
+  /*Add own battery voltage.*/
+  lora_message[8] = (uint8_t)((batteryVoltage >> 8));
+  lora_message[9] = (uint8_t)(batteryVoltage & 0xFF);
+  
+  uint8_t lora_message_length = 10;
   char printfbuf[50] = {0};
    
   Serial.print("Sending Message: ");
@@ -252,11 +266,14 @@ void loop()
   }
   LoRa.endPacket(true);                 // finish packet and send it
 
+  batteryVoltage = batteryVoltage + 1;   //TODO: just use this as a counter.   How to read the voltage from Sensor_VP input?
+      
   while(true)
-  { 
+  {     
     //Wait for tx Done and then go to sleep. 
     while(true)
     {
+      
      if (runEvery(100))
      {
       Serial.println("Waiting for Tx Done...");
