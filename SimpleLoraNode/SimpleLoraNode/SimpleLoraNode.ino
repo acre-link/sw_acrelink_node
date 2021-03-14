@@ -255,7 +255,7 @@ void loop()
   char printfbuf[50] = {0};
    
   Serial.print("Sending Message: ");
-  for(int i = 0; i<lora_message_length; i++)
+  for(int i = 0; i < lora_message_length; i++)
   {
     sprintf(printfbuf, "%02X:", lora_message[i]);
     Serial.print(printfbuf);
@@ -263,12 +263,8 @@ void loop()
   Serial.println("");
   LoRa_txMode();                        // set tx mode
   LoRa.beginPacket();                   // start packet
-  for(int i = 0; i < lora_message_length; i++)
-  {
-      LoRa.print(lora_message[i]);     // add payload
-  }
+  LoRa.write(lora_message, lora_message_length);
   LoRa.endPacket(true);                 // finish packet and send it
-
   batteryVoltage = batteryVoltage + 1;   //TODO: just use this as a counter.   How to read the voltage from Sensor_VP input?
       
   while(true)
