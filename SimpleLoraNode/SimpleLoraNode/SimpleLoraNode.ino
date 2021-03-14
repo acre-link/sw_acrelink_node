@@ -148,10 +148,13 @@ void onTxDone()
 }
 
 /* Configure pins and pheripheral for very low sleep current and got to sleep.*/
-void goToDeepSleep(void)
+void goToDeepSleep(uint8_t delay_offset)
 {
+  uint32_t baseSleepTime = 1000000 * sleepTimeS;
+  uint32_t individualSleepTime = baseSleepTime + 300000 * delay_offset;  // Some pseudo random offset to the sleep time.
+  
   Serial.print("Sleeping for: ");
-  Serial.print(sleepTimeS, DEC);
+  Serial.print((individualSleepTime / 1000000), DEC);
   Serial.println("s");
   LoRa.sleep();
 
@@ -161,9 +164,8 @@ void goToDeepSleep(void)
   pinMode(sckPin, INPUT_PULLUP);
   pinMode(csPin, INPUT_PULLUP);
   pinMode(resetPin, INPUT_PULLUP); 
-  //TODO: calculate a random delay on top of the "sleeping time" so that two nodes never send with an identical time interval. 
-  // Something like "airtime of message" * randombyte or last MAC Byte.
-  esp_sleep_enable_timer_wakeup(1000000 * sleepTimeS); // Sleep 10 second   
+  
+  esp_sleep_enable_timer_wakeup(individualSleepTime); 
   esp_deep_sleep_start();
 }
 
@@ -292,6 +294,6 @@ void loop()
      }
    }
    Serial.println(millis(), DEC); 
-   goToDeepSleep();
+   goToDeepSleep(lora_message[3]); // Use the last byte of the MAC Address to do some individual sleep interval to reduce canceling out chances.
  }
 }
