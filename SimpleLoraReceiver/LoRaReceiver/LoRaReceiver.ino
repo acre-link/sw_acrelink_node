@@ -30,22 +30,6 @@ volatile LORA_RX_MESSAGE rxMessages[LORA_NUM_OF_MESSAGES];
 /* Set flag if reception occured*/
 void onReceiveDone(int packetSize) 
 {
-
-/*  somehow not working!
-if (rxMessageIndex < LORA_NUM_OF_MESSAGES - 1)
-{
-  for(int i = 0; i < packetSize; i++)
-  {
-    rxMessages[rxMessageIndex].rx_data[i] = LoRa.read();
-    rxMessageBuffer[i] = rxMessages[rxMessageIndex].rx_data[i];
-  }
-  rxMessages[rxMessageIndex].rx_length = packetSize;
-  rxMessages[rxMessageIndex].rx_rssi = LoRa.packetRssi();
-
-  rxMessageIndex++;
-}
-*/
-
 if( false == rxDoneFlag )
 {
    for(int i = 0; i < packetSize; i++)
@@ -57,20 +41,10 @@ if( false == rxDoneFlag )
 
   rxDoneFlag = true;
 }
-
 else
 {
   /*Message buffer overrun. Can not handle new message*/
 }
-  /*
-  for(int i = 0; i<packetSize; i++)
-  {
-    rxMessageBuffer[i] = LoRa.read();
-  }
-  rxRssi = LoRa.packetRssi();
-  rxPacketSize = packetSize;
-  rxDoneFlag = true;
-  */
 }
 
 /* Set flag once transmission done*/
@@ -109,43 +83,18 @@ void setup() {
   LoRa.receive();
 }
 
+#define MAXNUMOFVALUES 20
 struct DATA
 {
-   String device_id;
+   uint32_t device_id;
    uint8_t rssi;
    String recorded_at;
-   uint16_t values[];  //Will be transmitted as HEX String to JSON
+   uint16_t values[MAXNUMOFVALUES];  //Will be transmitted as HEX String to JSON
 };
 
-DATA abe;
+DATA package1, package2;
 
 void loop() {
-
-//Disable and Enable Interrupts
-//noInterrupts();
-//interrupts();
-
-/*
-//LoRa.onReceive(NULL); // detatch LoRa RX Done interrupt again
-while(rxMessageIndex > 0)
-{
-  Serial.print("Received something. Length: ");
-  Serial.print(rxMessages[rxMessageIndex].rx_length, DEC);
-  int i = 0;
-  for(i = 0; i < rxMessages[rxMessageIndex].rx_length - 1; i++)
-  {
-    Serial.print(rxMessages[rxMessageIndex].rx_data[i], HEX);
-    Serial.print(":");
-  }
-  Serial.print(rxMessages[rxMessageIndex].rx_data[i], HEX);
-  Serial.print(" RSSI: ");
-  Serial.println(rxMessages[rxMessageIndex].rx_rssi, DEC); 
-
-  
-  rxMessageIndex--;
-}
-//LoRa.onReceive(onReceiveDone); //enable LoRa RX Done interrupt again
-*/
   if(rxDoneFlag == true)
   {
     Serial.print("Received something. Length: ");
@@ -162,6 +111,24 @@ while(rxMessageIndex > 0)
     Serial.print(" RSSI: ");
     Serial.println(rxRssi, DEC); 
 
+    /*Decode and put into structure*/
+
+    if(rxPacketSize >= 6) /*Only accept if package has at least one 16 bit sensor value*/
+    {
+      package1.device_id = rxMessageBuffer[0] << 24 | rxMessageBuffer[1] << 16 | rxMessageBuffer[2] << 8 | rxMessageBuffer[3];
+      package1.rssi = rxRssi;
+      package1.recorded_at = "20210328184901";
+
+      int numberOfValues = (rxPacketSize - 4) / 2; 
+      if (numberOfValues > MAXNUMOFVALUES)
+      {
+        numberOfValues = MAXNUMOFVALUES; //Limit maximum value count.
+      }
+      for ( int i = 0; i < numberOfValues; i++)
+      {
+        package1.values[i] = rxMessageBuffer[4 + i*2]<< 8 | rxMessageBuffer[5 + i*2];
+      }      
+    }
     rxDoneFlag = false;
   }
 }

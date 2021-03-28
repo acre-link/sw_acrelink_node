@@ -243,15 +243,17 @@ void loop()
 
   /*Add humitiy*/
   lora_message[6] = 0xFF;   /*TODO: add sensor*/
-
+  lora_message[7] = 0xFF;   
+  
   /* Add digital input bits*/
-  lora_message[7] = 0xAA;  /*TODO: add digital inputs and read bits*/
+  lora_message[8] = 0xAA;  /*TODO: add digital inputs and read bits*/
+  lora_message[9] = 0xAA; 
 
   /*Add own battery voltage.*/
-  lora_message[8] = (uint8_t)((batteryVoltage >> 8));
-  lora_message[9] = (uint8_t)(batteryVoltage & 0xFF);
+  lora_message[10] = (uint8_t)((batteryVoltage >> 8));
+  lora_message[11] = (uint8_t)(batteryVoltage & 0xFF);
   
-  uint8_t lora_message_length = 10;
+  uint8_t lora_message_length = 12;
   char printfbuf[50] = {0};
    
   Serial.print("Sending Message: ");
