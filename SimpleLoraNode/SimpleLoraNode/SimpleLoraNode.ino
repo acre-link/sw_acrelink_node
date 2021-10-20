@@ -23,9 +23,12 @@ const int sckPin = 18;
 const int csPin = 5;          // LoRa radio chip select
 const int resetPin = 15;        // LoRa radio reset
 const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
+const int voltageSenseEnablePin = 34;
 const int oneWireEnablePin = 35;
 const int oneWireDataPin1 = 25;
-const int oneWireDataPin2 = 26;
+
+const int voltageSensePin = 26; //36;
+const int gps_mosfet_switch = 22;
 
 const int spreadingFactor = 10;  //8 default
 const int txPower = 14; //14 is the legal limit on 868.0 - 868.7
@@ -153,7 +156,7 @@ void goToDeepSleep(uint8_t delay_offset)
   uint32_t baseSleepTime = 1000000 * sleepTimeS;
   uint32_t individualSleepTime = baseSleepTime + 300000 * delay_offset;  // Some pseudo random offset to the sleep time.
 
-  individualSleepTime = 10000000; //Debug send more often at 1 /10s
+  individualSleepTime = 30000000; //Debug send more often at 1 /10s
   Serial.print("Sleeping for: ");
   Serial.print((individualSleepTime / 1000000), DEC);
   Serial.println("s");
@@ -225,10 +228,18 @@ void setup()
   /*LoRa should be initialized here and in sleep mode*/
   
   /*Enable OneWire MOSFET Power Supply*/
-  pinMode(oneWireEnablePin, OUTPUT);
-  digitalWrite(oneWireEnablePin, LOW); 
+  //pinMode(oneWireEnablePin, OUTPUT);
+  //digitalWrite(oneWireEnablePin, LOW); 
   sensor1.begin();
+
+  //pinMode(voltageSenseEnablePin, OUTPUT);
+  //digitalWrite(voltageSenseEnablePin, LOW);
+  //pinMode(voltageSensePin, INPUT); 
+  //adcAttachPin(voltageSensePin);
+  //analogReadResolution(11);
+  //analogSetAttenuation(ADC_0db);
 }
+
 
 /* Read temperature, id, assemble package and transmit it.*/
 void loop() 
@@ -268,7 +279,7 @@ void loop()
   LoRa.write(lora_message, lora_message_length);
   LoRa.endPacket(true);                 // finish packet and send it
   batteryVoltage = batteryVoltage + 1;   //TODO: just use this as a counter.   How to read the voltage from Sensor_VP input?
-      
+  
   while(true)
   {     
     //Wait for tx Done and then go to sleep. 
@@ -277,7 +288,7 @@ void loop()
       
      if (runEvery(100))
      {
-      Serial.println("Waiting for Tx Done...");
+      Serial.println("Waiting for Tx Done...");  
      }
       
      if (millis() >= maximumAwakeTimeMs)
