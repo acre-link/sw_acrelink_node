@@ -17,19 +17,31 @@
 
 const long frequency = 868E6;  // LoRa Frequency
 
-const int misoPin = 19;
-const int mosiPin = 23;
-const int sckPin = 18;
-const int csPin = 5;          // LoRa radio chip select
-const int resetPin = 15;        // LoRa radio reset
-const int irqPin = 4;          // change for your board; must be a hardware interrupt pin
-const int voltageSenseEnablePin = 34;
-const int oneWireEnablePin = 35;
-const int oneWireDataPin1 = 25;
+// Good reference for the following: https://www.electroniclinic.com/esp32-wroom-32d-pinout-features-and-specifications/
+const int misoPin = 19;  //PIN31  GPIO19      V1_HW:  SPI_MISO
+const int mosiPin = 23;  //PIN37   GPIO23     V1-HW:  SPI_MOSI
+const int sckPin = 18;   //PIN30   GPIO18     V1-HW: SPI_SCK
+const int csPin = 5;     //PIN29  GPIO5     // LoRa radio chip select
+const int resetPin = 15;  //PIN23  GPIO15   // LoRa radio reset
+const int irqPin = 4;  //PIN26  GPIO4       // change for your board; must be a hardware interrupt pin
+const int voltageSenseEnablePin = 34;   //PIN6  GPIO34    V1-HW: VDD_SENSE_MOSFET_SWITCH
+const int oneWireEnablePin = 35;  //PIN7  GPIO35    V1-HW: VDD_SENSOR_MOSFET_SWITCH
+const int oneWireDataPin1 = 25;  //PIN10  GPIO25    V1-HW: ONEWIRE1_DATA
 
-const int voltageSensePin = 26; //36;
-const int gps_mosfet_switch = 22;
 
+//Test these pins for GPIO and Analog Functionality:
+const int analogInput1 = 14;  //PIN13  GPIO14  ADC2_CH6     V1-HW: UART1_RX
+const int analogInput2 = 13;  //PIN16 GPIO13 ADC2_CH4      V1-HW: UART1_TX
+
+const int voltageSensePin = 26; //PIN11 GPIO26;     V1-HW: ONEWIRE2_DATA
+const int gps_mosfet_switch = 22;   //PIN36  GPIO22;   V1-HW: I2C_SCL
+
+const int whateverA = 21;  //PIN33 GPIO21       V1-HW: I2C_SDA
+const int whateverB = 16;  //PIN27 GPIO16       V1-HW: UART2_RX
+const int whateverC = 17;  //PIN28 GPIO17       V1-HW: UART2_TX
+
+
+// Other defines:
 const int spreadingFactor = 10;  //8 default
 const int txPower = 14; //14 is the legal limit on 868.0 - 868.7
 const int sleepTimeS = 10;
@@ -156,7 +168,7 @@ void goToDeepSleep(uint8_t delay_offset)
   uint32_t baseSleepTime = 1000000 * sleepTimeS;
   uint32_t individualSleepTime = baseSleepTime + 300000 * delay_offset;  // Some pseudo random offset to the sleep time.
 
-  individualSleepTime = 30000000; //Debug send more often at 1 /10s
+  individualSleepTime = 120000000; //Debug send more often at 1 /10s
   Serial.print("Sleeping for: ");
   Serial.print((individualSleepTime / 1000000), DEC);
   Serial.println("s");
