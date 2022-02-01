@@ -36,7 +36,6 @@
 #include <hal/hal.h>
 #include <SPI.h>
 
-//
 // For normal use, we require that you edit the sketch to replace FILLMEIN
 // with values assigned by the TTN console. However, for regression tests,
 // we want to be able to compile these scripts. The regression tests define
@@ -68,6 +67,10 @@ static const u1_t PROGMEM APPKEY[16] = { 0x6C,0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
 void do_send(osjob_t* j);
+
+// Provide a RTC memory space to store and restore session information during deep sleep.
+RTC_DATA_ATTR lmic_t RTC_LMIC; 
+bool GOTO_DEEPSLEEP = false;
 
 static uint8_t mydata[] = "Hello, world!";
 static osjob_t sendjob;
@@ -136,6 +139,9 @@ void onEvent (ev_t ev) {
                       printHex2(nwkKey[i]);
               }
               Serial.println();
+              Serial.print("rxDelay: ");
+              Serial.println(LMIC.rxDelay, DEC);
+
             }
             // Disable link check validation (automatically enabled
             // during join, but because slow data rates change max TX
@@ -165,8 +171,7 @@ void onEvent (ev_t ev) {
               Serial.print(LMIC.dataLen);
               Serial.println(F(" bytes of payload"));
             }
-            // Schedule next transmission
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+            GOTO_DEEPSLEEP = true; // Start deep sleep and schedule next TX after wakeup
             break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
@@ -221,30 +226,86 @@ void do_send(osjob_t* j){
         LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
         Serial.println(F("Packet queued"));
     }
-    // Next TX is scheduled after TX_COMPLETE event.
 }
+
+void SaveLMICToRTC(int deepsleep_sec)
+{
+    // Copy instance memory to deep sleep rtc memory.
+    RTC_LMIC = LMIC;
+    // EU Like Bands
+
+    //System time is resetted after sleep. So we need to calculate the dutycycle with a resetted system time
+    unsigned long now = millis();
+#if defined(CFG_LMIC_EU_like)
+    for(int i = 0; i < MAX_BANDS; i++) {
+        ostime_t correctedAvail = RTC_LMIC.bands[i].avail - ((now/1000.0 + deepsleep_sec ) * OSTICKS_PER_SEC);
+        if(correctedAvail < 0) {
+            correctedAvail = 0;
+        }
+        RTC_LMIC.bands[i].avail = correctedAvail;
+    }
+    RTC_LMIC.globalDutyAvail = RTC_LMIC.globalDutyAvail - ((now/1000.0 + deepsleep_sec ) * OSTICKS_PER_SEC);
+    if(RTC_LMIC.globalDutyAvail < 0) 
+    {
+        RTC_LMIC.globalDutyAvail = 0;
+    }
+#else
+    Serial.println("No DutyCycle recalculation function!")
+#endif
+}
+
 
 void setup() {
     Serial.begin(115200);
-    Serial.println(F("Starting"));
-
-    #ifdef VCC_ENABLE
-    // For Pinoccio Scout boards
-    pinMode(VCC_ENABLE, OUTPUT);
-    digitalWrite(VCC_ENABLE, HIGH);
-    delay(1000);
-    #endif
 
     // LMIC init
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
 
-  
+    // Load the LoRa information from RTC
+    if (RTC_LMIC.seqnoUp != 0)
+    { 
+        Serial.println("Waiking up from deepsleep.");
+        LMIC = RTC_LMIC;
+        //os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+    }
+    else
+    {
+    Serial.println(F("Cold start."));
+    }
+
     // Start job (sending automatically starts OTAA too)
     do_send(&sendjob);
 }
 
+int32_t timeTillJob = 0;
+int i = 0;
 void loop() {
     os_runloop_once();
+
+    //i++;
+    //if(i >= 1000)
+    //{
+    //    i = 0;
+    //    timeTillJob = os_get_jobs_deadline() - os_getTime();
+    //    Serial.print("There are jobs in ticks :");
+    //    Serial.println(timeTillJob, DEC);
+    //}
+    //else
+    //{
+        // Sleep for 1 second would be possible here! 
+        //esp_sleep_enable_timer_wakeup(1 * 1000000);
+        //delay(100);
+        //esp_light_sleep_start();  
+    //}
+
+    int seconds = 60;
+    if (true == GOTO_DEEPSLEEP )
+    {
+        SaveLMICToRTC(seconds);
+        Serial.println("Going to deepsleep. ");
+        esp_sleep_enable_timer_wakeup(seconds * 1000000);
+        esp_deep_sleep_start();
+    }
 }
