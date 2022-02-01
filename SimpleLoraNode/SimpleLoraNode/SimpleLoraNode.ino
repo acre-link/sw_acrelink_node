@@ -30,22 +30,24 @@ const int oneWireDataPin1 = 25;  //PIN10  GPIO25    V1-HW: ONEWIRE1_DATA
 
 
 //Test these pins for GPIO and Analog Functionality:
-const int analogInput1 = 14;  //PIN13  GPIO14  ADC2_CH6     V1-HW: UART1_RX
-const int analogInput2 = 13;  //PIN16 GPIO13 ADC2_CH4      V1-HW: UART1_TX
+const int analogInput1 = 14;  //PIN13  GPIO14  ADC2_CH6     V1-HW: UART1_RX   //ADC input works: 1.6V ~ 1780(12bit value, attn 11db)
+const int analogInput2 = 13;  //PIN16 GPIO13 ADC2_CH4      V1-HW: UART1_TX      //ADC input works 
 
-const int voltageSensePin = 26; //PIN11 GPIO26;     V1-HW: ONEWIRE2_DATA
-const int gps_mosfet_switch = 22;   //PIN36  GPIO22;   V1-HW: I2C_SCL
+const int voltageSensePin = 26; //PIN11 GPIO26;     V1-HW: ONEWIRE2_DATA    //ADC input works     Voltage
+const int gps_mosfet_switch = 22;   //PIN36  GPIO22;   V1-HW: I2C_SCL     //GPIO controll works.
 
-const int whateverA = 21;  //PIN33 GPIO21       V1-HW: I2C_SDA
-const int whateverB = 16;  //PIN27 GPIO16       V1-HW: UART2_RX
-const int whateverC = 17;  //PIN28 GPIO17       V1-HW: UART2_TX
-
+const int whateverA = 21;  //PIN33 GPIO21       V1-HW: I2C_SDA     // GPIO out works
+const int whateverB = 16;  //PIN27 GPIO16       V1-HW: UART2_RX     // GPIO out works
+const int whateverC = 17;  //PIN28 GPIO17       V1-HW: UART2_TX    //GPIO out works
+const int buck_5v_en = 27;  //PIN12 GPIO27       V1-HW: GPS MOSFET Switch    //GPIO out works
+const int whateverE = 32;  //PIN8 GPIO32        V1-HW: XTAL32_XP
+const int whateverF = 33;  //PIN9 GPIO33        V1-HW: XTAL32_XN
 
 // Other defines:
 const int spreadingFactor = 10;  //8 default
 const int txPower = 14; //14 is the legal limit on 868.0 - 868.7
 const int sleepTimeS = 10;
-const int maximumAwakeTimeMs = 3000;
+const int maximumAwakeTimeMs = 30000;
 const uint8_t nodeGeneration = 1; //Used so that the gateway can distinguish between different nodes.
 
 
@@ -168,7 +170,7 @@ void goToDeepSleep(uint8_t delay_offset)
   uint32_t baseSleepTime = 1000000 * sleepTimeS;
   uint32_t individualSleepTime = baseSleepTime + 300000 * delay_offset;  // Some pseudo random offset to the sleep time.
 
-  individualSleepTime = 120000000; //Debug send more often at 1 /10s
+  individualSleepTime = 12000000; //Debug send more often at 1 /10s
   Serial.print("Sleeping for: ");
   Serial.print((individualSleepTime / 1000000), DEC);
   Serial.println("s");
@@ -180,6 +182,8 @@ void goToDeepSleep(uint8_t delay_offset)
   pinMode(sckPin, INPUT_PULLUP);
   pinMode(csPin, INPUT_PULLUP);
   pinMode(resetPin, INPUT_PULLUP); 
+
+  digitalWrite(buck_5v_en, HIGH);  //Switch off 5V Buck
   
   esp_sleep_enable_timer_wakeup(individualSleepTime); 
   esp_deep_sleep_start();
@@ -246,10 +250,23 @@ void setup()
 
   //pinMode(voltageSenseEnablePin, OUTPUT);
   //digitalWrite(voltageSenseEnablePin, LOW);
-  //pinMode(voltageSensePin, INPUT); 
-  //adcAttachPin(voltageSensePin);
-  //analogReadResolution(11);
-  //analogSetAttenuation(ADC_0db);
+
+
+ 
+  pinMode(analogInput1, INPUT); 
+  adcAttachPin(analogInput1);
+  pinMode(analogInput2, INPUT); 
+  adcAttachPin(analogInput2);
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+
+  pinMode(voltageSensePin, INPUT); 
+  adcAttachPin(voltageSensePin);
+
+
+  pinMode(buck_5v_en, OUTPUT);
+  digitalWrite(buck_5v_en, LOW);  //Switch on 5V Buck
+
 }
 
 
@@ -291,7 +308,7 @@ void loop()
   LoRa.write(lora_message, lora_message_length);
   LoRa.endPacket(true);                 // finish packet and send it
   batteryVoltage = batteryVoltage + 1;   //TODO: just use this as a counter.   How to read the voltage from Sensor_VP input?
-  
+  int i  = 0;
   while(true)
   {     
     //Wait for tx Done and then go to sleep. 
@@ -300,7 +317,18 @@ void loop()
       
      if (runEvery(100))
      {
-      Serial.println("Waiting for Tx Done...");  
+      //Serial.println("Waiting for Tx Done...");  
+
+     
+      Serial.print("Input1: ");
+      Serial.println(analogRead(analogInput1), DEC); 
+
+      Serial.print("Input2: ");
+      Serial.println(analogRead(analogInput2), DEC); 
+
+      
+      
+
      }
       
      if (millis() >= maximumAwakeTimeMs)
@@ -311,8 +339,8 @@ void loop()
 
      if(true == txDoneFlag)
      {
-        Serial.print("TxDone ms: ");
-        break;
+        //Serial.print("TxDone ms: ");
+        //break;
      }
    }
    Serial.println(millis(), DEC); 
