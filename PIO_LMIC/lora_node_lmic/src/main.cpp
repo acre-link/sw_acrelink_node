@@ -69,7 +69,7 @@ void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 void do_send(osjob_t* j);
 
 // Provide a RTC memory space to store and restore session information during deep sleep.
-RTC_DATA_ATTR lmic_t RTC_LMIC; 
+RTC_DATA_ATTR static lmic_t RTC_LMIC; 
 bool GOTO_DEEPSLEEP = false;
 
 static uint8_t mydata[] = "Hello, world!";
@@ -218,13 +218,16 @@ void onEvent (ev_t ev) {
 }
 
 void do_send(osjob_t* j){
+
+    lmic_tx_error_t status = LMIC_ERROR_SUCCESS;
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
-        Serial.println(F("Packet queued"));
+        status = LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+        Serial.print(F("Packet queued, LMIC.opmode: "));
+        Serial.println(LMIC.opmode, HEX);
     }
 }
 
@@ -257,6 +260,8 @@ void SaveLMICToRTC(int deepsleep_sec)
 
 void setup() {
     Serial.begin(115200);
+    while(!Serial);
+    Serial.println("Setup start.");
 
     // LMIC init
     os_init();
@@ -266,9 +271,12 @@ void setup() {
     // Load the LoRa information from RTC
     if (RTC_LMIC.seqnoUp != 0)
     { 
-        Serial.println("Waiking up from deepsleep.");
+        Serial.println("Waking up from deepsleep.");
+        Serial.print("Up sequence number: ");
+        Serial.println(RTC_LMIC.seqnoUp);
         LMIC = RTC_LMIC;
-        //os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+        LMIC.opmode = OP_NONE; //reset state Works but why do we need this?
+        
     }
     else
     {
