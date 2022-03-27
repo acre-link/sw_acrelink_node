@@ -87,7 +87,12 @@ const lmic_pinmap lmic_pins = {
     .dio = {4, 32, 34},
 };
 
+// Pin definitions
 const int POWER_EN_PIN = 27;
+const int VDD_SENSE_PIN = 13;
+const int ANALOG_SENSE1_PIN = 14;
+const int ANALOG_SENSE2_PIN = 26;
+const int LED_SIGNAL_PIN = 33;
 
 void printHex2(unsigned v) {
     v &= 0xff;
@@ -267,7 +272,20 @@ void setup() {
 
     pinMode(POWER_EN_PIN, OUTPUT_OPEN_DRAIN);
     digitalWrite(POWER_EN_PIN, LOW);  //Enable 5V Buck converter. 
+
+    pinMode(LED_SIGNAL_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(LED_SIGNAL_PIN, LOW);  // Enable LED
  
+    pinMode(VDD_SENSE_PIN, INPUT);
+    pinMode(ANALOG_SENSE1_PIN, INPUT);
+    pinMode(ANALOG_SENSE2_PIN, INPUT);
+
+    adcAttachPin(VDD_SENSE_PIN);
+    adcAttachPin(ANALOG_SENSE1_PIN);
+    adcAttachPin(ANALOG_SENSE2_PIN);
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_11db);
+
 
     // LMIC init
     os_init();
@@ -295,9 +313,45 @@ void setup() {
 
 int32_t timeTillJob = 0;
 int i = 0;
+float vdd_voltage = 0.0f;
+float humidity = 0.0f;
+float temperature = 0.0f;
+
+
 void loop() {
     os_runloop_once();
 
+
+if (i < 100)
+{
+    i++;
+
+
+
+    vdd_voltage = (float)analogRead(VDD_SENSE_PIN);
+    vdd_voltage = vdd_voltage * 0.003668508f; //experimentally calculated
+
+
+    humidity = (float)analogRead(ANALOG_SENSE1_PIN);
+    humidity = humidity / 23.770f;  //experimentally calculated
+
+    temperature = (float)analogRead(ANALOG_SENSE2_PIN); 
+    temperature = (temperature / 1130.0f * 60.0f) - 40.0f;
+
+
+
+    Serial.print("VDD Sense: ");
+    Serial.print(vdd_voltage * 1000.0, DEC); 
+
+    Serial.print(" In1: ");
+    Serial.print(humidity* 1000.0, DEC); 
+
+    Serial.print(" In2: ");
+    Serial.println(temperature * 1000.0, DEC); 
+}
+    //Humidity 1.79V == unter wasser  == 2127 ADC Wert       2 V == 2377 == 100% 
+    //Bat :; 3.32V == 905 ADC Wert      3.32/905  *ADC value 
+    //Temp 1130 == 1V == 22.6°C     //-40 == 0V   +80  == 2V   == 120Grad Range 
     //i++;
     //if(i >= 1000)
     //{
