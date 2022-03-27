@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <CayenneLPP.h>
 
 /*******************************************************************************
  * Copyright (c) 2015 Thomas Telkamp and Matthijs Kooijman
@@ -43,33 +44,33 @@
 // working but innocuous value.
 //
 #ifdef COMPILE_REGRESSION_TEST
-# define FILLMEIN 0
+#define FILLMEIN 0
 #else
-# warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
-# define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
+#warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
+#define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
 #endif
 
 // This EUI must be in little-endian format, so least-significant-byte
 // first. When copying an EUI from ttnctl output, this means to reverse
 // the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
 // 0x70.
-static const u1_t PROGMEM APPEUI[8]={ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
+static const u1_t PROGMEM APPEUI[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+void os_getArtEui(u1_t *buf) { memcpy_P(buf, APPEUI, 8); }
 
 // This should also be in little endian format, see above.
-static const u1_t PROGMEM DEVEUI[8]={0xE4, 0xC0, 0x04, 0xD0, 0x7E, 0xD5, 0xB3, 0x70};
-void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
+static const u1_t PROGMEM DEVEUI[8] = {0xE4, 0xC0, 0x04, 0xD0, 0x7E, 0xD5, 0xB3, 0x70};
+void os_getDevEui(u1_t *buf) { memcpy_P(buf, DEVEUI, 8); }
 
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
 // practice, a key taken from ttnctl can be copied as-is.
-static const u1_t PROGMEM APPKEY[16] = { 0x6C,0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0xA5, 0x31, 0x1A, 0xD2, 0x02, 0x60 };
-void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
+static const u1_t PROGMEM APPKEY[16] = {0x6C, 0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0xA5, 0x31, 0x1A, 0xD2, 0x02, 0x60};
+void os_getDevKey(u1_t *buf) { memcpy_P(buf, APPKEY, 16); }
 
-void do_send(osjob_t* j);
+void do_send(osjob_t *j);
 
 // Provide a RTC memory space to store and restore session information during deep sleep.
-RTC_DATA_ATTR static lmic_t RTC_LMIC; 
+RTC_DATA_ATTR static lmic_t RTC_LMIC;
 bool GOTO_DEEPSLEEP = false;
 
 static uint8_t mydata[] = "Hello, world!";
@@ -94,148 +95,178 @@ const int ANALOG_SENSE1_PIN = 14;
 const int ANALOG_SENSE2_PIN = 26;
 const int LED_SIGNAL_PIN = 33;
 
-void printHex2(unsigned v) {
+void printHex2(unsigned v)
+{
     v &= 0xff;
     if (v < 16)
         Serial.print('0');
     Serial.print(v, HEX);
 }
 
-void onEvent (ev_t ev) {
+void onEvent(ev_t ev)
+{
     Serial.print(os_getTime());
     Serial.print(": ");
-    switch(ev) {
-        case EV_SCAN_TIMEOUT:
-            Serial.println(F("EV_SCAN_TIMEOUT"));
-            break;
-        case EV_BEACON_FOUND:
-            Serial.println(F("EV_BEACON_FOUND"));
-            break;
-        case EV_BEACON_MISSED:
-            Serial.println(F("EV_BEACON_MISSED"));
-            break;
-        case EV_BEACON_TRACKED:
-            Serial.println(F("EV_BEACON_TRACKED"));
-            break;
-        case EV_JOINING:
-            Serial.println(F("EV_JOINING"));
-            break;
-        case EV_JOINED:
-            Serial.println(F("EV_JOINED"));
+    switch (ev)
+    {
+    case EV_SCAN_TIMEOUT:
+        Serial.println(F("EV_SCAN_TIMEOUT"));
+        break;
+    case EV_BEACON_FOUND:
+        Serial.println(F("EV_BEACON_FOUND"));
+        break;
+    case EV_BEACON_MISSED:
+        Serial.println(F("EV_BEACON_MISSED"));
+        break;
+    case EV_BEACON_TRACKED:
+        Serial.println(F("EV_BEACON_TRACKED"));
+        break;
+    case EV_JOINING:
+        Serial.println(F("EV_JOINING"));
+        break;
+    case EV_JOINED:
+        Serial.println(F("EV_JOINED"));
+        {
+            u4_t netid = 0;
+            devaddr_t devaddr = 0;
+            u1_t nwkKey[16];
+            u1_t artKey[16];
+            LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
+            Serial.print("netid: ");
+            Serial.println(netid, DEC);
+            Serial.print("devaddr: ");
+            Serial.println(devaddr, HEX);
+            Serial.print("AppSKey: ");
+            for (size_t i = 0; i < sizeof(artKey); ++i)
             {
-              u4_t netid = 0;
-              devaddr_t devaddr = 0;
-              u1_t nwkKey[16];
-              u1_t artKey[16];
-              LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
-              Serial.print("netid: ");
-              Serial.println(netid, DEC);
-              Serial.print("devaddr: ");
-              Serial.println(devaddr, HEX);
-              Serial.print("AppSKey: ");
-              for (size_t i=0; i<sizeof(artKey); ++i) {
                 if (i != 0)
-                  Serial.print("-");
+                    Serial.print("-");
                 printHex2(artKey[i]);
-              }
-              Serial.println("");
-              Serial.print("NwkSKey: ");
-              for (size_t i=0; i<sizeof(nwkKey); ++i) {
-                      if (i != 0)
-                              Serial.print("-");
-                      printHex2(nwkKey[i]);
-              }
-              Serial.println();
-              Serial.print("rxDelay: ");
-              Serial.println(LMIC.rxDelay, DEC);
-
             }
-            // Disable link check validation (automatically enabled
-            // during join, but because slow data rates change max TX
-      // size, we don't use it in this example.
-            LMIC_setLinkCheckMode(0);
-            break;
-        /*
-        || This event is defined but not used in the code. No
-        || point in wasting codespace on it.
-        ||
-        || case EV_RFU1:
-        ||     Serial.println(F("EV_RFU1"));
-        ||     break;
-        */
-        case EV_JOIN_FAILED:
-            Serial.println(F("EV_JOIN_FAILED"));
-            break;
-        case EV_REJOIN_FAILED:
-            Serial.println(F("EV_REJOIN_FAILED"));
-            break;
-        case EV_TXCOMPLETE:
-            Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
-            if (LMIC.txrxFlags & TXRX_ACK)
-              Serial.println(F("Received ack"));
-            if (LMIC.dataLen) {
-              Serial.print(F("Received "));
-              Serial.print(LMIC.dataLen);
-              Serial.println(F(" bytes of payload"));
+            Serial.println("");
+            Serial.print("NwkSKey: ");
+            for (size_t i = 0; i < sizeof(nwkKey); ++i)
+            {
+                if (i != 0)
+                    Serial.print("-");
+                printHex2(nwkKey[i]);
             }
-            GOTO_DEEPSLEEP = true; // Start deep sleep and schedule next TX after wakeup
-            break;
-        case EV_LOST_TSYNC:
-            Serial.println(F("EV_LOST_TSYNC"));
-            break;
-        case EV_RESET:
-            Serial.println(F("EV_RESET"));
-            break;
-        case EV_RXCOMPLETE:
-            // data received in ping slot
-            Serial.println(F("EV_RXCOMPLETE"));
-            break;
-        case EV_LINK_DEAD:
-            Serial.println(F("EV_LINK_DEAD"));
-            break;
-        case EV_LINK_ALIVE:
-            Serial.println(F("EV_LINK_ALIVE"));
-            break;
-        /*
-        || This event is defined but not used in the code. No
-        || point in wasting codespace on it.
-        ||
-        || case EV_SCAN_FOUND:
-        ||    Serial.println(F("EV_SCAN_FOUND"));
-        ||    break;
-        */
-        case EV_TXSTART:
-            Serial.println(F("EV_TXSTART"));
-            break;
-        case EV_TXCANCELED:
-            Serial.println(F("EV_TXCANCELED"));
-            break;
-        case EV_RXSTART:
-            /* do not print anything -- it wrecks timing */
-            break;
-        case EV_JOIN_TXCOMPLETE:
-            Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
-            break;
+            Serial.println();
+            Serial.print("rxDelay: ");
+            Serial.println(LMIC.rxDelay, DEC);
+        }
+        // Disable link check validation (automatically enabled
+        // during join, but because slow data rates change max TX
+        // size, we don't use it in this example.
+        LMIC_setLinkCheckMode(0);
+        break;
+    /*
+    || This event is defined but not used in the code. No
+    || point in wasting codespace on it.
+    ||
+    || case EV_RFU1:
+    ||     Serial.println(F("EV_RFU1"));
+    ||     break;
+    */
+    case EV_JOIN_FAILED:
+        Serial.println(F("EV_JOIN_FAILED"));
+        break;
+    case EV_REJOIN_FAILED:
+        Serial.println(F("EV_REJOIN_FAILED"));
+        break;
+    case EV_TXCOMPLETE:
+        Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+        if (LMIC.txrxFlags & TXRX_ACK)
+            Serial.println(F("Received ack"));
+        if (LMIC.dataLen)
+        {
+            Serial.print(F("Received "));
+            Serial.print(LMIC.dataLen);
+            Serial.println(F(" bytes of payload"));
+        }
+        GOTO_DEEPSLEEP = true; // Start deep sleep and schedule next TX after wakeup
+        break;
+    case EV_LOST_TSYNC:
+        Serial.println(F("EV_LOST_TSYNC"));
+        break;
+    case EV_RESET:
+        Serial.println(F("EV_RESET"));
+        break;
+    case EV_RXCOMPLETE:
+        // data received in ping slot
+        Serial.println(F("EV_RXCOMPLETE"));
+        break;
+    case EV_LINK_DEAD:
+        Serial.println(F("EV_LINK_DEAD"));
+        break;
+    case EV_LINK_ALIVE:
+        Serial.println(F("EV_LINK_ALIVE"));
+        break;
+    /*
+    || This event is defined but not used in the code. No
+    || point in wasting codespace on it.
+    ||
+    || case EV_SCAN_FOUND:
+    ||    Serial.println(F("EV_SCAN_FOUND"));
+    ||    break;
+    */
+    case EV_TXSTART:
+        Serial.println(F("EV_TXSTART"));
+        break;
+    case EV_TXCANCELED:
+        Serial.println(F("EV_TXCANCELED"));
+        break;
+    case EV_RXSTART:
+        /* do not print anything -- it wrecks timing */
+        break;
+    case EV_JOIN_TXCOMPLETE:
+        Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
+        break;
 
-        default:
-            Serial.print(F("Unknown event: "));
-            Serial.println((unsigned) ev);
-            break;
+    default:
+        Serial.print(F("Unknown event: "));
+        Serial.println((unsigned)ev);
+        break;
     }
 }
 
-void do_send(osjob_t* j){
+void do_send(osjob_t *j)
+{
 
     lmic_tx_error_t status = LMIC_ERROR_SUCCESS;
     // Check if there is not a current TX/RX job running
-    if (LMIC.opmode & OP_TXRXPEND) {
+    if (LMIC.opmode & OP_TXRXPEND)
+    {
         Serial.println(F("OP_TXRXPEND, not sending"));
-    } else {
+    }
+    else
+    {
         // Prepare upstream data transmission at the next possible time.
-        status = LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0);
+        status = LMIC_setTxData2(1, mydata, sizeof(mydata) - 1, 0);
         Serial.print(F("Packet queued, LMIC.opmode: "));
         Serial.println(LMIC.opmode, HEX);
     }
+}
+
+void do_send_cayenne(float voltage, float humidity, float temperature)
+{
+    CayenneLPP lpp(51);
+    lpp.addVoltage(1, voltage);
+    lpp.addRelativeHumidity(2, humidity);
+    lpp.addTemperature(3, temperature);
+
+    if (LMIC.opmode & OP_TXRXPEND)
+    {
+        Serial.println(F("OP_TXRXPEND, not sending"));
+    }
+    else
+    {
+        // Prepare upstream data transmission at the next possible time.
+        LMIC_setTxData2(1, lpp.getBuffer(), lpp.getSize(), 0);
+        Serial.print(F("Packet queued, LMIC.opmode: "));
+        Serial.println(LMIC.opmode, HEX);
+    }
+
 }
 
 void SaveLMICToRTC(int deepsleep_sec)
@@ -244,18 +275,20 @@ void SaveLMICToRTC(int deepsleep_sec)
     RTC_LMIC = LMIC;
     // EU Like Bands
 
-    //System time is resetted after sleep. So we need to calculate the dutycycle with a resetted system time
+    // System time is resetted after sleep. So we need to calculate the dutycycle with a resetted system time
     unsigned long now = millis();
 #if defined(CFG_LMIC_EU_like)
-    for(int i = 0; i < MAX_BANDS; i++) {
-        ostime_t correctedAvail = RTC_LMIC.bands[i].avail - ((now/1000.0 + deepsleep_sec ) * OSTICKS_PER_SEC);
-        if(correctedAvail < 0) {
+    for (int i = 0; i < MAX_BANDS; i++)
+    {
+        ostime_t correctedAvail = RTC_LMIC.bands[i].avail - ((now / 1000.0 + deepsleep_sec) * OSTICKS_PER_SEC);
+        if (correctedAvail < 0)
+        {
             correctedAvail = 0;
         }
         RTC_LMIC.bands[i].avail = correctedAvail;
     }
-    RTC_LMIC.globalDutyAvail = RTC_LMIC.globalDutyAvail - ((now/1000.0 + deepsleep_sec ) * OSTICKS_PER_SEC);
-    if(RTC_LMIC.globalDutyAvail < 0) 
+    RTC_LMIC.globalDutyAvail = RTC_LMIC.globalDutyAvail - ((now / 1000.0 + deepsleep_sec) * OSTICKS_PER_SEC);
+    if (RTC_LMIC.globalDutyAvail < 0)
     {
         RTC_LMIC.globalDutyAvail = 0;
     }
@@ -264,18 +297,19 @@ void SaveLMICToRTC(int deepsleep_sec)
 #endif
 }
 
-
-void setup() {
+void setup()
+{
     Serial.begin(115200);
-    while(!Serial);
+    while (!Serial)
+        ;
     Serial.println("Setup start.");
 
     pinMode(POWER_EN_PIN, OUTPUT_OPEN_DRAIN);
-    digitalWrite(POWER_EN_PIN, LOW);  //Enable 5V Buck converter. 
+    digitalWrite(POWER_EN_PIN, LOW); // Enable 5V Buck converter.
 
     pinMode(LED_SIGNAL_PIN, OUTPUT_OPEN_DRAIN);
-    digitalWrite(LED_SIGNAL_PIN, LOW);  // Enable LED
- 
+    digitalWrite(LED_SIGNAL_PIN, LOW); // Enable LED
+
     pinMode(VDD_SENSE_PIN, INPUT);
     pinMode(ANALOG_SENSE1_PIN, INPUT);
     pinMode(ANALOG_SENSE2_PIN, INPUT);
@@ -286,7 +320,6 @@ void setup() {
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 
-
     // LMIC init
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
@@ -294,82 +327,90 @@ void setup() {
 
     // Load the LoRa information from RTC
     if (RTC_LMIC.seqnoUp != 0)
-    { 
+    {
         Serial.println("Waking up from deepsleep.");
         Serial.print("Up sequence number: ");
         Serial.println(RTC_LMIC.seqnoUp);
         LMIC = RTC_LMIC;
-        LMIC.opmode = OP_NONE; //reset state Works but why do we need this?
-        
+        LMIC.opmode = OP_NONE; // reset state Works but why do we need this?
     }
     else
     {
-    Serial.println(F("Cold start."));
+        Serial.println(F("Cold start."));
     }
 
     // Start job (sending automatically starts OTAA too)
-    do_send(&sendjob);
+    //do_send(&sendjob);
 }
 
 int32_t timeTillJob = 0;
 int i = 0;
-float vdd_voltage = 0.0f;
-float humidity = 0.0f;
-float temperature = 0.0f;
+//float vdd_voltage = 0.0f;
+//float humidity = 0.0f;
+//float temperature = 0.0f;
+//bool started = false;
+void loop()
+{
+    static bool started = false;
+    static float vdd_voltage = 0.0f;
+    static float humidity_sense = 0.0f;
+    static float temperature_sense = 0.0f;
 
-
-void loop() {
     os_runloop_once();
 
+    if (i < 20)
+    {
+        i++;
 
-if (i < 100)
-{
-    i++;
+        // Humidity 1.79V == unter wasser  == 2127 ADC Wert       2 V == 2377 == 100%
+        // Bat :; 3.32V == 905 ADC Wert      3.32/905  *ADC value
+        // Temp 1130 == 1V == 22.6°C     //-40 == 0V   +80  == 2V   == 120Grad Range
 
+        vdd_voltage = (float)analogRead(VDD_SENSE_PIN);
+        vdd_voltage = vdd_voltage * 0.003668508f; // experimentally calculated
 
+        humidity_sense = (float)analogRead(ANALOG_SENSE1_PIN);
+        humidity_sense = humidity_sense / 23.770f; // experimentally calculated
 
-    vdd_voltage = (float)analogRead(VDD_SENSE_PIN);
-    vdd_voltage = vdd_voltage * 0.003668508f; //experimentally calculated
+        temperature_sense = (float)analogRead(ANALOG_SENSE2_PIN);
+        temperature_sense = (temperature_sense / 1130.0f * 60.0f) - 40.0f;
 
+        Serial.print("VDD Sense: ");
+        Serial.print(vdd_voltage * 1000.0, DEC);
 
-    humidity = (float)analogRead(ANALOG_SENSE1_PIN);
-    humidity = humidity / 23.770f;  //experimentally calculated
+        Serial.print(" Humidity: ");
+        Serial.print(humidity_sense * 1000.0, DEC);
 
-    temperature = (float)analogRead(ANALOG_SENSE2_PIN); 
-    temperature = (temperature / 1130.0f * 60.0f) - 40.0f;
+        Serial.print(" Temperature: ");
+        Serial.println(temperature_sense * 1000.0, DEC);
+    }
+    else
+    {
+        if(false == started)
+        {
+            started = true;
+            do_send_cayenne(vdd_voltage, humidity_sense, temperature_sense);
+        }        
+    }
 
-
-
-    Serial.print("VDD Sense: ");
-    Serial.print(vdd_voltage * 1000.0, DEC); 
-
-    Serial.print(" In1: ");
-    Serial.print(humidity* 1000.0, DEC); 
-
-    Serial.print(" In2: ");
-    Serial.println(temperature * 1000.0, DEC); 
-}
-    //Humidity 1.79V == unter wasser  == 2127 ADC Wert       2 V == 2377 == 100% 
-    //Bat :; 3.32V == 905 ADC Wert      3.32/905  *ADC value 
-    //Temp 1130 == 1V == 22.6°C     //-40 == 0V   +80  == 2V   == 120Grad Range 
-    //i++;
-    //if(i >= 1000)
+    // i++;
+    // if(i >= 1000)
     //{
-    //    i = 0;
-    //    timeTillJob = os_get_jobs_deadline() - os_getTime();
-    //    Serial.print("There are jobs in ticks :");
-    //    Serial.println(timeTillJob, DEC);
-    //}
-    //else
+    //     i = 0;
+    //     timeTillJob = os_get_jobs_deadline() - os_getTime();
+    //     Serial.print("There are jobs in ticks :");
+    //     Serial.println(timeTillJob, DEC);
+    // }
+    // else
     //{
-        // Sleep for 1 second would be possible here! 
-        //esp_sleep_enable_timer_wakeup(1 * 1000000);
-        //delay(100);
-        //esp_light_sleep_start();  
+    //  Sleep for 1 second would be possible here!
+    // esp_sleep_enable_timer_wakeup(1 * 1000000);
+    // delay(100);
+    // esp_light_sleep_start();
     //}
 
     int seconds = 60;
-    if (true == GOTO_DEEPSLEEP )
+    if (true == GOTO_DEEPSLEEP)
     {
         SaveLMICToRTC(seconds);
         Serial.println("Going to deepsleep. ");
