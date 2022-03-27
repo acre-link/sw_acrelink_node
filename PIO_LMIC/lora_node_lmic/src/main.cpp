@@ -87,6 +87,8 @@ const lmic_pinmap lmic_pins = {
     .dio = {4, 32, 34},
 };
 
+const int POWER_EN_PIN = 27;
+
 void printHex2(unsigned v) {
     v &= 0xff;
     if (v < 16)
@@ -262,6 +264,10 @@ void setup() {
     Serial.begin(115200);
     while(!Serial);
     Serial.println("Setup start.");
+
+    pinMode(POWER_EN_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(POWER_EN_PIN, LOW);  //Enable 5V Buck converter. 
+ 
 
     // LMIC init
     os_init();
