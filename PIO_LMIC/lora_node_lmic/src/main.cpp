@@ -251,7 +251,8 @@ void do_send(osjob_t *j)
 void do_send_cayenne(float voltage, float humidity, float temperature)
 {
     CayenneLPP lpp(51);
-    lpp.addVoltage(1, voltage);
+    lpp.reset();
+    lpp.addAnalogInput(1, voltage);  //there is no working voltage channel with ttn. 
     lpp.addRelativeHumidity(2, humidity);
     lpp.addTemperature(3, temperature);
 
