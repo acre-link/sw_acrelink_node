@@ -43,12 +43,13 @@
 // COMPILE_REGRESSION_TEST, and in that case we define FILLMEIN to a non-
 // working but innocuous value.
 //
-#ifdef COMPILE_REGRESSION_TEST
-#define FILLMEIN 0
-#else
-#warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
-#define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
-#endif
+
+//#ifdef COMPILE_REGRESSION_TEST
+//#define FILLMEIN 0
+//#else
+//#warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
+//#define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
+//#endif
 
 // This EUI must be in little-endian format, so least-significant-byte
 // first. When copying an EUI from ttnctl output, this means to reverse
@@ -67,18 +68,10 @@ void os_getDevEui(u1_t *buf) { memcpy_P(buf, DEVEUI, 8); }
 static const u1_t PROGMEM APPKEY[16] = {0x6C, 0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0xA5, 0x31, 0x1A, 0xD2, 0x02, 0x60};
 void os_getDevKey(u1_t *buf) { memcpy_P(buf, APPKEY, 16); }
 
-//void do_send(osjob_t *j);
 
 // Provide a RTC memory space to store and restore session information during deep sleep.
 RTC_DATA_ATTR static lmic_t RTC_LMIC;
 bool GOTO_DEEPSLEEP = false;
-
-//static uint8_t mydata[] = "Hello, world!";
-//static osjob_t sendjob;
-
-// Schedule TX every this many seconds (might become longer due to duty
-// cycle limitations).
-//const unsigned TX_INTERVAL = 60;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -229,26 +222,6 @@ void onEvent(ev_t ev)
         break;
     }
 }
-
-/*
-void do_send(osjob_t *j)
-{
-
-    lmic_tx_error_t status = LMIC_ERROR_SUCCESS;
-    // Check if there is not a current TX/RX job running
-    if (LMIC.opmode & OP_TXRXPEND)
-    {
-        Serial.println(F("OP_TXRXPEND, not sending"));
-    }
-    else
-    {
-        // Prepare upstream data transmission at the next possible time.
-        status = LMIC_setTxData2(1, mydata, sizeof(mydata) - 1, 0);
-        Serial.print(F("Packet queued, LMIC.opmode: "));
-        Serial.println(LMIC.opmode, HEX);
-    }
-}
-*/
 
 void do_send_cayenne(float voltage, float humidity, float temperature)
 {
@@ -424,22 +397,6 @@ void loop()
             do_send_cayenne(vdd_voltage, humidity_sense, temperature_sense);
         }        
     }
-
-    // i++;
-    // if(i >= 1000)
-    //{
-    //     i = 0;
-    //     timeTillJob = os_get_jobs_deadline() - os_getTime();
-    //     Serial.print("There are jobs in ticks :");
-    //     Serial.println(timeTillJob, DEC);
-    // }
-    // else
-    //{
-    //  Sleep for 1 second would be possible here!
-    // esp_sleep_enable_timer_wakeup(1 * 1000000);
-    // delay(100);
-    // esp_light_sleep_start();
-    //}
 
     int seconds = 60;
     if (true == GOTO_DEEPSLEEP)
