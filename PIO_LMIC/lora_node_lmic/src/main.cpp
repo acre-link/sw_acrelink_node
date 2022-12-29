@@ -67,18 +67,18 @@ void os_getDevEui(u1_t *buf) { memcpy_P(buf, DEVEUI, 8); }
 static const u1_t PROGMEM APPKEY[16] = {0x6C, 0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0xA5, 0x31, 0x1A, 0xD2, 0x02, 0x60};
 void os_getDevKey(u1_t *buf) { memcpy_P(buf, APPKEY, 16); }
 
-void do_send(osjob_t *j);
+//void do_send(osjob_t *j);
 
 // Provide a RTC memory space to store and restore session information during deep sleep.
 RTC_DATA_ATTR static lmic_t RTC_LMIC;
 bool GOTO_DEEPSLEEP = false;
 
-static uint8_t mydata[] = "Hello, world!";
-static osjob_t sendjob;
+//static uint8_t mydata[] = "Hello, world!";
+//static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 60;
+//const unsigned TX_INTERVAL = 60;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -230,6 +230,7 @@ void onEvent(ev_t ev)
     }
 }
 
+/*
 void do_send(osjob_t *j)
 {
 
@@ -247,6 +248,7 @@ void do_send(osjob_t *j)
         Serial.println(LMIC.opmode, HEX);
     }
 }
+*/
 
 void do_send_cayenne(float voltage, float humidity, float temperature)
 {
@@ -263,9 +265,22 @@ void do_send_cayenne(float voltage, float humidity, float temperature)
     else
     {
         // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(1, lpp.getBuffer(), lpp.getSize(), 0);
+        //LMIC_setTxData2(1, lpp.getBuffer(), lpp.getSize(), 0);
+        LMIC_setTxData2_strict(1, lpp.getBuffer(), lpp.getSize(), 0);
         Serial.print(F("Packet queued, LMIC.opmode: "));
         Serial.println(LMIC.opmode, HEX);
+
+        Serial.print(F("os_getTime: "));
+        Serial.println(os_getTime(), DEC);
+
+        Serial.print(F("millis(): "));
+        Serial.println(millis(), DEC);
+        
+        Serial.print(F("RTC_LMIC.globalDutyAvail: "));
+        Serial.println(RTC_LMIC.globalDutyAvail, DEC);
+
+        Serial.print(F("LMIC.osjob.deadline: "));
+        Serial.println(LMIC.osjob.deadline, DEC);
     }
 
 }
@@ -277,7 +292,7 @@ void SaveLMICToRTC(int deepsleep_sec)
     // EU Like Bands
 
     // System time is resetted after sleep. So we need to calculate the dutycycle with a resetted system time
-    unsigned long now = millis();
+    unsigned long now = os_getTime(); //does this change fixes the problem. millis();
 #if defined(CFG_LMIC_EU_like)
     for (int i = 0; i < MAX_BANDS; i++)
     {
@@ -334,19 +349,30 @@ void setup()
         Serial.println(RTC_LMIC.seqnoUp);
         LMIC = RTC_LMIC;
         LMIC.opmode = OP_NONE; // reset state Works but why do we need this?
+
+        LMIC.globalDutyAvail =  os_getTime(); //millis() + 10; //allow sending a packet in 10ms. Could violate duty cycle limitation.
+
+
+        for (int i = 0; i<MAX_BANDS; i++)
+        {
+            LMIC.bands[i].avail = os_getTime();  // Allow sending on all channels right away.
+        }
+        
     }
     else
     {
         Serial.println(F("Cold start."));
     }
 
-    LMIC_setClockError(MAX_CLOCK_ERROR * 60 / 100);  //MAX_CLOCK_ERROR * 1 / 100.
+    LMIC_setClockError(MAX_CLOCK_ERROR * 10 / 100);  //60
+
+    LMIC_setDrTxpow(DR_SF12, 14);  //14 or 20?
 
     // Start job (sending automatically starts OTAA too)
     //do_send(&sendjob);
 
     // 0 == external power,  1 - 254 == battery level,  255 == no information possible
-    LMIC_setBatteryLevel(100);
+    LMIC_setBatteryLevel(100);  //TODO: adjuste to battery voltage
 }
 
 int32_t timeTillJob = 0;
