@@ -340,8 +340,13 @@ void setup()
         Serial.println(F("Cold start."));
     }
 
+    LMIC_setClockError(MAX_CLOCK_ERROR * 60 / 100);  //MAX_CLOCK_ERROR * 1 / 100.
+
     // Start job (sending automatically starts OTAA too)
     //do_send(&sendjob);
+
+    // 0 == external power,  1 - 254 == battery level,  255 == no information possible
+    LMIC_setBatteryLevel(100);
 }
 
 int32_t timeTillJob = 0;
