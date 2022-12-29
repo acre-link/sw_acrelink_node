@@ -230,6 +230,7 @@ void do_send_cayenne(float voltage, float humidity, float temperature)
     lpp.addAnalogInput(1, voltage);  //there is no working voltage channel with ttn. 
     lpp.addRelativeHumidity(2, humidity);
     lpp.addTemperature(3, temperature);
+    //lpp.addGPS(4, lat, long, alt);
 
     if (LMIC.opmode & OP_TXRXPEND)
     {
@@ -338,14 +339,7 @@ void setup()
     }
 
     LMIC_setClockError(MAX_CLOCK_ERROR * 10 / 100);  //60
-
     LMIC_setDrTxpow(DR_SF12, 14);  //14 or 20?
-
-    // Start job (sending automatically starts OTAA too)
-    //do_send(&sendjob);
-
-    // 0 == external power,  1 - 254 == battery level,  255 == no information possible
-    LMIC_setBatteryLevel(100);  //TODO: adjuste to battery voltage
 }
 
 int32_t timeTillJob = 0;
@@ -358,8 +352,10 @@ void loop()
 {
     static bool started = false;
     static float vdd_voltage = 0.0f;
+    static float voltage_level_percent = 0.0f;
     static float humidity_sense = 0.0f;
     static float temperature_sense = 0.0f;
+
 
     os_runloop_once();
 
@@ -373,6 +369,22 @@ void loop()
 
         vdd_voltage = (float)analogRead(VDD_SENSE_PIN);
         vdd_voltage = vdd_voltage * 0.003668508f; // experimentally calculated
+
+         //Simple battery level for Li-SOCl2 chemistry.  TODO: should be temperature calibrated.
+
+        if (vdd_voltage <= 2.5f){
+            voltage_level_percent = 0.0f;
+        }
+        else if (vdd_voltage >= 3.6f){
+            voltage_level_percent = 100.0f;
+        }
+        else{
+            voltage_level_percent = (vdd_voltage - 2.5f) * 79.36f;
+        }
+        
+        // 0 == external power,  1 - 254 == battery level,  255 == no information possible
+        LMIC_setBatteryLevel(voltage_level_percent * 2.54f);  //TODO: adjuste to battery voltage
+    
 
         humidity_sense = (float)analogRead(ANALOG_SENSE1_PIN);
         humidity_sense = humidity_sense / 23.770f; // experimentally calculated
@@ -398,7 +410,7 @@ void loop()
         }        
     }
 
-    int seconds = 60;
+    int seconds = 900;  //Send every 15 minutes
     if (true == GOTO_DEEPSLEEP)
     {
         SaveLMICToRTC(seconds);
