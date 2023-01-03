@@ -1,41 +1,22 @@
 #include <Arduino.h>
 #include <CayenneLPP.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 
-/*******************************************************************************
- * Copyright (c) 2015 Thomas Telkamp and Matthijs Kooijman
- * Copyright (c) 2018 Terry Moore, MCCI
- *
- * Permission is hereby granted, free of charge, to anyone
- * obtaining a copy of this document and accompanying files,
- * to do whatever they want with them without any restriction,
- * including, but not limited to, copying, modification and redistribution.
- * NO WARRANTY OF ANY KIND IS PROVIDED.
- *
- * This example sends a valid LoRaWAN packet with payload "Hello,
- * world!", using frequency and encryption settings matching those of
- * the The Things Network.
- *
- * This uses OTAA (Over-the-air activation), where where a DevEUI and
- * application key is configured, which are used in an over-the-air
- * activation procedure where a DevAddr and session keys are
- * assigned/generated for use with all further communication.
- *
- * Note: LoRaWAN per sub-band duty-cycle limitation is enforced (1% in
- * g1, 0.1% in g2), but not the TTN fair usage policy (which is probably
- * violated by this sketch when left running for longer)!
- * To use this sketch, first register your application and device with
- * the things network, to set or generate an AppEUI, DevEUI and AppKey.
- * Multiple devices can use the same AppEUI, but each device has its own
- * DevEUI and AppKey.
- *
- * Do not forget to define the radio type correctly in
- * arduino-lmic/project_config/lmic_project_config.h or from your BOARDS.txt.
- *
- *******************************************************************************/
 
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+
+// WiFi credentials
+const char* ssid = "kottaspegel";
+const char* password = "neumayer";
+
+// REST GPS position
+float lat = 0.00;
+float lon = 0.00;
+float alt = 0.00;
+uint64_t chipid;
 
 // For normal use, we require that you edit the sketch to replace FILLMEIN
 // with values assigned by the TTN console. However, for regression tests,
@@ -59,13 +40,12 @@ static const u1_t PROGMEM APPEUI[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 void os_getArtEui(u1_t *buf) { memcpy_P(buf, APPEUI, 8); }
 
 // This should also be in little endian format, see above.
-static const u1_t PROGMEM DEVEUI[8] = {0xE4, 0xC0, 0x04, 0xD0, 0x7E, 0xD5, 0xB3, 0x70};
+static u1_t DEVEUI[8] = {0xE4, 0xC0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 void os_getDevEui(u1_t *buf) { memcpy_P(buf, DEVEUI, 8); }
-
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
 // practice, a key taken from ttnctl can be copied as-is.
-static const u1_t PROGMEM APPKEY[16] = {0x6C, 0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0xA5, 0x31, 0x1A, 0xD2, 0x02, 0x60};
+static u1_t APPKEY[16] = {0x6C, 0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void os_getDevKey(u1_t *buf) { memcpy_P(buf, APPKEY, 16); }
 
 
@@ -228,9 +208,9 @@ void do_send_cayenne(float voltage, float humidity, float temperature)
     CayenneLPP lpp(51);
     lpp.reset();
     lpp.addAnalogInput(1, voltage);  //there is no working voltage channel with ttn. 
-    lpp.addRelativeHumidity(2, humidity);
-    lpp.addTemperature(3, temperature);
-    //lpp.addGPS(4, lat, long, alt);
+    //lpp.addRelativeHumidity(2, humidity);
+    //lpp.addTemperature(3, temperature);
+    lpp.addGPS(2, lat, lon, alt);
 
     if (LMIC.opmode & OP_TXRXPEND)
     {
@@ -290,9 +270,99 @@ void SaveLMICToRTC(int deepsleep_sec)
 void setup()
 {
     Serial.begin(115200);
-    while (!Serial)
-        ;
+    while (!Serial);
     Serial.println("Setup start.");
+
+    chipid = ESP.getEfuseMac();
+    
+    Serial.println(chipid, HEX);
+
+    for(int i = 0; i<= 5; i++){
+        DEVEUI[i+2] = (chipid >> (8 * (5 - i)) & 0xff);
+        APPKEY[i+10] = (chipid >> (8 * (5 - i)) & 0xff);
+    }
+    
+    Serial.println("DEVEUI:");
+    for(int i = 7; i >= 0; i--) {
+        Serial.print(DEVEUI[i], HEX);
+    }
+    Serial.println("");
+    Serial.println("APPKEY:");
+    for(int i = 0; i < 16; i++) {
+        Serial.print(APPKEY[i], HEX);
+    }
+
+    //gw:       E89F6D6EA0D0C0E4
+    // ERZEUGT: E4C0D0A06E6D9FE8
+
+    // WiFi Begin
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    Serial.println("\nConnecting");
+
+    while(WiFi.status() != WL_CONNECTED){
+        Serial.print(".");
+        delay(100);
+    }
+
+    Serial.println("\nConnected to the WiFi network");
+    Serial.print("Local ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+
+
+    if(WiFi.status()== WL_CONNECTED){
+      HTTPClient http;
+
+      String serverPath = "http://192.168.1.1:1880/rest/position";
+      http.begin(serverPath.c_str());
+      int httpResponseCode = http.GET();
+      
+      if (httpResponseCode>0) {
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
+        String payload = http.getString();
+        
+        char* arr_payload = new char[payload.length() + 1];
+
+        char *pos[3];
+        char *ptr = NULL;
+
+        
+        byte index = 0;
+
+        ptr = strtok(arr_payload, ",");
+        while (ptr != NULL)
+        {
+            pos[index] = ptr;
+            index++;
+            ptr = strtok(NULL, ",");
+        }
+
+        lat = atof(pos[0]);
+        lon = atof(pos[1]);
+        alt = atof(pos[2]);
+        
+        Serial.print("lat: ");
+        Serial.println(lat,8);
+        Serial.print("lon: ");
+        Serial.println(lon,8);
+        Serial.print("alt: ");
+        Serial.println(alt,2);
+        
+      }
+      else {
+        Serial.print("Error code: ");
+        Serial.println(httpResponseCode);
+      }
+      http.end();
+    }
+    
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(500);
+    // WiFi End
+
+
 
     pinMode(POWER_EN_PIN, OUTPUT_OPEN_DRAIN);
     digitalWrite(POWER_EN_PIN, LOW); // Enable 5V Buck converter.
@@ -324,7 +394,7 @@ void setup()
         LMIC = RTC_LMIC;
         LMIC.opmode = OP_NONE; // reset state Works but why do we need this?
 
-        LMIC.globalDutyAvail =  os_getTime(); //millis() + 10; //allow sending a packet in 10ms. Could violate duty cycle limitation.
+        LMIC.globalDutyAvail = os_getTime(); //millis() + 10; //allow sending a packet in 10ms. Could violate duty cycle limitation.
 
 
         for (int i = 0; i<MAX_BANDS; i++)
@@ -340,6 +410,7 @@ void setup()
 
     LMIC_setClockError(MAX_CLOCK_ERROR * 10 / 100);  //60
     LMIC_setDrTxpow(DR_SF12, 14);  //14 or 20?
+
 }
 
 int32_t timeTillJob = 0;
@@ -356,9 +427,9 @@ void loop()
     static float humidity_sense = 0.0f;
     static float temperature_sense = 0.0f;
 
-
     os_runloop_once();
 
+    
     if (i < 20)
     {
         i++;
