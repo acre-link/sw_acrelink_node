@@ -1,21 +1,12 @@
 #include <Arduino.h>
 #include <CayenneLPP.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
-
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
 
-// WiFi credentials
-const char* ssid = "kottaspegel";
-const char* password = "neumayer";
-
-// REST GPS position
-float lat = 0.00;
-float lon = 0.00;
-float alt = 0.00;
 uint64_t chipid;
 
 // For normal use, we require that you edit the sketch to replace FILLMEIN
@@ -48,7 +39,6 @@ void os_getDevEui(u1_t *buf) { memcpy_P(buf, DEVEUI, 8); }
 static u1_t APPKEY[16] = {0x6C, 0xAC, 0x3C, 0xB3, 0x6E, 0x85, 0xDE, 0x7B, 0x1A, 0x9B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void os_getDevKey(u1_t *buf) { memcpy_P(buf, APPKEY, 16); }
 
-
 // Provide a RTC memory space to store and restore session information during deep sleep.
 RTC_DATA_ATTR static lmic_t RTC_LMIC;
 bool GOTO_DEEPSLEEP = false;
@@ -66,7 +56,13 @@ const int POWER_EN_PIN = 27;
 const int VDD_SENSE_PIN = 13;
 const int ANALOG_SENSE1_PIN = 14;
 const int ANALOG_SENSE2_PIN = 26;
+const int ONEWIRE_DATA_PIN = 25;
 const int LED_SIGNAL_PIN = 33;
+
+// OneWire Temp Sensor
+OneWire oneWire(ONEWIRE_DATA_PIN);
+DallasTemperature sensors(&oneWire);
+static float temperatureC = 0.0f;
 
 void printHex2(unsigned v)
 {
@@ -209,8 +205,7 @@ void do_send_cayenne(float voltage, float humidity, float temperature)
     lpp.reset();
     lpp.addAnalogInput(1, voltage);  //there is no working voltage channel with ttn. 
     //lpp.addRelativeHumidity(2, humidity);
-    //lpp.addTemperature(3, temperature);
-    lpp.addGPS(2, lat, lon, alt);
+    lpp.addTemperature(3, temperature);
 
     if (LMIC.opmode & OP_TXRXPEND)
     {
@@ -236,7 +231,6 @@ void do_send_cayenne(float voltage, float humidity, float temperature)
         Serial.print(F("LMIC.osjob.deadline: "));
         Serial.println(LMIC.osjob.deadline, DEC);
     }
-
 }
 
 void SaveLMICToRTC(int deepsleep_sec)
@@ -274,7 +268,6 @@ void setup()
     Serial.println("Setup start.");
 
     chipid = ESP.getEfuseMac();
-    
     Serial.println(chipid, HEX);
 
     for(int i = 0; i<= 5; i++){
@@ -291,82 +284,16 @@ void setup()
     for(int i = 0; i < 16; i++) {
         Serial.print(APPKEY[i], HEX);
     }
-
-    //gw:       E89F6D6EA0D0C0E4
-    // ERZEUGT: E4C0D0A06E6D9FE8
-
-    // WiFi Begin
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    Serial.println("\nConnecting");
-
-    while(WiFi.status() != WL_CONNECTED){
-        Serial.print(".");
-        delay(100);
-    }
-
-    Serial.println("\nConnected to the WiFi network");
-    Serial.print("Local ESP32 IP: ");
-    Serial.println(WiFi.localIP());
-
-
-    if(WiFi.status()== WL_CONNECTED){
-      HTTPClient http;
-
-      String serverPath = "http://192.168.1.1:1880/rest/position";
-      http.begin(serverPath.c_str());
-      int httpResponseCode = http.GET();
-      
-      if (httpResponseCode>0) {
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
-        String payload = http.getString();
-        
-        char* arr_payload = new char[payload.length() + 1];
-
-        char *pos[3];
-        char *ptr = NULL;
-
-        
-        byte index = 0;
-
-        ptr = strtok(arr_payload, ",");
-        while (ptr != NULL)
-        {
-            pos[index] = ptr;
-            index++;
-            ptr = strtok(NULL, ",");
-        }
-
-        lat = atof(pos[0]);
-        lon = atof(pos[1]);
-        alt = atof(pos[2]);
-        
-        Serial.print("lat: ");
-        Serial.println(lat,8);
-        Serial.print("lon: ");
-        Serial.println(lon,8);
-        Serial.print("alt: ");
-        Serial.println(alt,2);
-        
-      }
-      else {
-        Serial.print("Error code: ");
-        Serial.println(httpResponseCode);
-      }
-      http.end();
-    }
+    Serial.println("");
     
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    delay(500);
-    // WiFi End
-
-
-
     pinMode(POWER_EN_PIN, OUTPUT_OPEN_DRAIN);
     digitalWrite(POWER_EN_PIN, LOW); // Enable 5V Buck converter.
 
+    // One Wire Temp Sensor (After enabling power!)
+    sensors.begin();
+    sensors.requestTemperatures();
+    temperatureC = sensors.getTempCByIndex(0);
+    
     pinMode(LED_SIGNAL_PIN, OUTPUT_OPEN_DRAIN);
     digitalWrite(LED_SIGNAL_PIN, LOW); // Enable LED
 
@@ -393,15 +320,12 @@ void setup()
         Serial.println(RTC_LMIC.seqnoUp);
         LMIC = RTC_LMIC;
         LMIC.opmode = OP_NONE; // reset state Works but why do we need this?
-
         LMIC.globalDutyAvail = os_getTime(); //millis() + 10; //allow sending a packet in 10ms. Could violate duty cycle limitation.
-
 
         for (int i = 0; i<MAX_BANDS; i++)
         {
             LMIC.bands[i].avail = os_getTime();  // Allow sending on all channels right away.
         }
-        
     }
     else
     {
@@ -425,11 +349,10 @@ void loop()
     static float vdd_voltage = 0.0f;
     static float voltage_level_percent = 0.0f;
     static float humidity_sense = 0.0f;
-    static float temperature_sense = 0.0f;
+    // static float temperature_sense = 0.0f;
 
     os_runloop_once();
 
-    
     if (i < 20)
     {
         i++;
@@ -457,27 +380,34 @@ void loop()
         LMIC_setBatteryLevel(voltage_level_percent * 2.54f);  //TODO: adjuste to battery voltage
     
 
-        humidity_sense = (float)analogRead(ANALOG_SENSE1_PIN);
-        humidity_sense = humidity_sense / 23.770f; // experimentally calculated
+        // humidity_sense = (float)analogRead(ANALOG_SENSE1_PIN);
+        // humidity_sense = humidity_sense / 23.770f; // experimentally calculated
 
-        temperature_sense = (float)analogRead(ANALOG_SENSE2_PIN);
-        temperature_sense = (temperature_sense / 1130.0f * 60.0f) - 40.0f;
+        // temperature_sense = (float)analogRead(ANALOG_SENSE2_PIN);
+        // temperature_sense = (temperature_sense / 1130.0f * 60.0f) - 40.0f;
 
-        Serial.print("VDD Sense: ");
-        Serial.print(vdd_voltage * 1000.0, DEC);
+        if (i >= 20){
+            Serial.print("VDD Sense: ");
+            Serial.print(vdd_voltage * 1000.0, DEC);
 
-        Serial.print(" Humidity: ");
-        Serial.print(humidity_sense * 1000.0, DEC);
+            Serial.print(" Temperature: ");
+            Serial.println(temperatureC);
 
-        Serial.print(" Temperature: ");
-        Serial.println(temperature_sense * 1000.0, DEC);
+            // Serial.print(" Humidity: ");
+            // Serial.print(humidity_sense * 1000.0, DEC);
+
+            // Serial.print(" Temperature: ");
+            // Serial.println(temperature_sense * 1000.0, DEC);
+            // Serial.print(" Temperature: ");
+            // Serial.println(temperature_sense * 1000.0, DEC);
+        }
     }
     else
     {
         if(false == started)
         {
             started = true;
-            do_send_cayenne(vdd_voltage, humidity_sense, temperature_sense);
+            do_send_cayenne(vdd_voltage, humidity_sense, temperatureC);
         }        
     }
 
